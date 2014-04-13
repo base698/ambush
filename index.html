@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+  <title>Tanks!</title>
+  <style>
+  </style>
+  <script type="text/javascript" src="out/goog/base.js"></script>
+  <script type="text/javascript" src="out/tanks.js"></script>
+  <script type="text/javascript">goog.require('tanks.core');</script>
+  <script type="text/javascript">
+    window.onload = function() {
+      console.log(tanks.core.main());
+      document.getElementById('msg').innerHTML = '';
+    }
+  </script>
+</head>
+<body id="main">
+   <canvas width="800" height="600"></canvas> 
+   <div id="msg"></div>
+</body>
+</html>
+
