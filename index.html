@@ -3,20 +3,23 @@
 <head>
   <title>Tanks!</title>
   <style>
+    body {
+      width: 100%;
+      height: 100%;
+    }
   </style>
   <script type="text/javascript" src="out/goog/base.js"></script>
   <script type="text/javascript" src="out/tanks.js"></script>
   <script type="text/javascript">goog.require('tanks.core');</script>
   <script type="text/javascript">
     window.onload = function() {
-      console.log(tanks.core.main());
-      document.getElementById('msg').innerHTML = '';
+      tanks.core.main();
+      //document.getElementById('msg').innerHTML = '';
     }
   </script>
 </head>
 <body id="main">
-   <canvas width="800" height="600"></canvas> 
-   <div id="msg"></div>
+   <canvas width="800" height="600"></canvas>
 </body>
 </html>
 
