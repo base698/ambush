@@ -42,10 +42,15 @@
   ctx))
 
 (defmulti draw-entity :type)
+
+; TODO: fix
 (defmethod draw-entity :player [p]
-  (let [ctx (get-ctx) position (p :position)]
-      (.fillRect ctx (first position) (last position) 20 20)))
-      ;(.rotate ctx 0)))
+  (let [ctx (get-ctx) position (p :position) x (first position) y (second position)]
+    (.save ctx)
+    (.translate ctx (+ x  (/ 20 2)) (+ y (/ 20 2)))
+    (.rotate ctx (player :angle))
+    (.fillRect ctx -10 -10 20 20)
+    (.restore ctx)))
 
 (defmethod draw-entity :shot [p]
   (let [ctx (get-ctx) position (p :position)]
@@ -91,8 +96,9 @@
     (player-position! new-position)))
 
 (defmethod do-event :shoot [x]
-  (let [player-position (player :position)]
-    (set! entities (conj entities {:id (get-id) :type :shot :angle (player :angle) :position player-position}))))
+  (let [x (first (player :position)) y (second (player :position))]
+    (set! entities (conj entities 
+    {:id (get-id) :type :shot :angle (player :angle) :position [x (+ 8 y)]}))))
 
 (defn draw-world []
   (let [ctx (get-ctx)]
@@ -100,7 +106,7 @@
     (do (draw-entity player) (doseq [x entities] (draw-entity x) ) )))
 
 (defn get-world-events [timestamp] 
-   (let [world-events (map #(if (= (%1 :type) :shot) {:shot-move 4 :id (%1 :id)}) entities)]
+   (let [world-events (map #(if (and true (= (%1 :type) :shot)) {:shot-move 4 :id (%1 :id)}) entities)]
     world-events))
 
 (defn handle-events [events] 
