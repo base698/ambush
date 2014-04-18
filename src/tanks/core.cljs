@@ -61,13 +61,6 @@
   (let [player-position (player :position)]
     (set! entities (conj entities {:type :shot :position player-position}))))
 
-(defn player-move [events]
-  (if (> (count events) 0) 
-     (player-position! (reduce (fn [x y]
-      (let [coord (y :player-move)]
-        [(+ (first x) (first coord)) (+ (second x) (second coord))] 
-      )) (player :position) events ))))
-
 (defn draw-world []
   (let [ctx (get-ctx)]
     (.clearRect ctx 0 0 800 600)
@@ -84,12 +77,12 @@
 
 (defn update-world [keypresses timestamp]
     (let [
-      press-list (seq keypresses) 
-      player-events  (map #(assoc %1 :timestamp timestamp) (keep 
-        #(if (second %1) 
-          (player-key-map (first %1))) press-list))
+      press-list (seq (select-keys keypresses (for [[k v] keypresses :when v] k)))
+      player-events (->> press-list
+        (keep #(player-key-map (first %1)))
+        (map #(assoc %1 :timestamp timestamp)))
       world-events (get-world-events timestamp)]
-      (handle-events (concat player-events world-events))) )
+     (handle-events (concat player-events world-events))) )
 
 (defn ^:export main []
   (def keypresses {})
