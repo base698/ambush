@@ -1,7 +1,8 @@
 (defproject tanks "0.0.3"
   :plugins [[lein-cljsbuild "1.0.3"]]
   :dependencies [
-      [org.clojure/clojurescript "0.0-2197"]]
+      [org.clojure/clojurescript "0.0-2197"]
+      [org.clojure/tools.nrepl "0.2.3"]]
   :cljsbuild {
     :builds [{
         ; The path to the top-level ClojureScript source directory:
