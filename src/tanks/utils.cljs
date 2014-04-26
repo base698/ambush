@@ -1,5 +1,9 @@
 (ns tanks.utils) 
 
 (defn log [x]
-  (.log js/console (pr-str x)))
+  (if x
+  (.log js/console (pr-str x))
+  (.log js/console x)
+  )
+  )
 

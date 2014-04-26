@@ -11,6 +11,7 @@
 (defn get-id []
   (set! tank-id (inc tank-id)) tank-id)
 
+; TODO: make hash by id
 (def entities [])
 
 (def player {
@@ -43,7 +44,6 @@
 
 (defmulti draw-entity :type)
 
-; TODO: fix
 (defmethod draw-entity :player [p]
   (let [ctx (get-ctx) position (p :position) x (first position) y (second position)]
     (.save ctx)
@@ -72,15 +72,20 @@
 (defmulti do-event #(first (keys %1)))
 (defmethod do-event :default [x])
 
+(.setInterval js/window #(log entities) 2000)
+
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
-      shot (first (for [x entities :when (= (e :id) (x :id))] x))
-      position (shot :position)
-      x (+ (first position) (* (cos (shot :angle)) move ))
-      y (+ (second position) (* (sin (shot :angle)) move ))
-    new-shot (assoc shot :position [x y])]
-    (set! entities (for [x entities] (choose x new-shot (e :id))))
-   ))
+      shot (first (filter #(= (e :id) (%1 :id)) entities))
+      ]
+      (cond shot
+        (let [
+          position (shot :position)
+          x (+ (first position) (* (cos (shot :angle)) move ))
+          y (+ (second position) (* (sin (shot :angle)) move ))
+          new-shot (assoc shot :position [x y])]
+        (set! entities (for [x entities :when (let [pos (x :position) shotX (first pos) shotY (second pos)] 
+        (and (> shotX 0) (< shotX 800) (> shotY 0) (< shotY 600) ))] (choose x new-shot (e :id))))))))
 
 (defmethod do-event :player-turn [e]
   (let [angle (e :player-turn)]
