@@ -1,9 +1,11 @@
 (ns tanks.core
  (:use [tanks.utils :only [log]]))
 
+(def WIDTH 800)
+(def HEIGHT 600)
 (def world { 
-  :width 800 
-  :height 600 
+  :width WIDTH
+  :height HEIGHT
   :entities []
 })
 
@@ -69,11 +71,11 @@
 (defn choose [a b id] 
    (if (= id (a :id)) b a))
 
+(defn in-bounds? [x y] 
+  (and (> x 0) (< x WIDTH) (> y 0) (< y HEIGHT)))
+
 (defmulti do-event #(first (keys %1)))
 (defmethod do-event :default [x])
-
-(.setInterval js/window #(log entities) 2000)
-
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
       shot (first (filter #(= (e :id) (%1 :id)) entities))
@@ -85,7 +87,7 @@
           y (+ (second position) (* (sin (shot :angle)) move ))
           new-shot (assoc shot :position [x y])]
         (set! entities (for [x entities :when (let [pos (x :position) shotX (first pos) shotY (second pos)] 
-        (and (> shotX 0) (< shotX 800) (> shotY 0) (< shotY 600) ))] (choose x new-shot (e :id))))))))
+        (in-bounds? shotX shotY))] (choose x new-shot (e :id))))))))
 
 (defmethod do-event :player-turn [e]
   (let [angle (e :player-turn)]
