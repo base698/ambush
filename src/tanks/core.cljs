@@ -22,6 +22,7 @@
   :health 100
   :position [200,200]
   :angle 0
+  :last-shot 0
   :bombs 1})
 
 (def key-map { 87 :w 
@@ -74,6 +75,9 @@
 (defn in-bounds? [x y] 
   (and (> x 0) (< x WIDTH) (> y 0) (< y HEIGHT)))
 
+(defn can-shoot? [t]
+  (> (- t (player :last-shot)) 500))
+
 (defmulti do-event #(first (keys %1)))
 (defmethod do-event :default [x])
 (defmethod do-event :shot-move [e]
@@ -103,9 +107,11 @@
     (player-position! new-position)))
 
 (defmethod do-event :shoot [x]
-  (let [x (first (player :position)) y (second (player :position))]
-    (set! entities (conj entities 
-    {:id (get-id) :type :shot :angle (player :angle) :position [x (+ 8 y)]}))))
+  (let [t (x :timestamp) x (first (player :position)) y (second (player :position))]
+    (when (can-shoot? t) 
+    (set! entities (conj entities {:id (get-id) :type :shot :angle (player :angle) :position [x (+ 8 y)]}))
+    (set! player (assoc player :last-shot t))
+    )))
 
 (defn draw-world []
   (let [ctx (get-ctx)]
