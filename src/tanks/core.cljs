@@ -53,6 +53,7 @@
     (.translate ctx (+ x  (/ 20 2)) (+ y (/ 20 2)))
     (.rotate ctx (player :angle))
     (.fillRect ctx -10 -10 20 20)
+    (.fillRect ctx 8 -2 5 5)
     (.restore ctx)))
 
 (defmethod draw-entity :shot [p]
@@ -109,7 +110,13 @@
 (defmethod do-event :shoot [x]
   (let [t (x :timestamp) x (first (player :position)) y (second (player :position))]
     (when (can-shoot? t) 
-    (set! entities (conj entities {:id (get-id) :type :shot :angle (player :angle) :position [x (+ 8 y)]}))
+    (let []
+      (set! entities (conj entities {
+        :id (get-id) 
+        :type :shot 
+        :angle (player :angle) 
+        :position [(+ 7 x) (+ 7 y)]
+      })))
     (set! player (assoc player :last-shot t))
     )))
 
