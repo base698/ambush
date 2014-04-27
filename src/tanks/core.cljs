@@ -91,8 +91,8 @@
           x (+ (first position) (* (cos (shot :angle)) move ))
           y (+ (second position) (* (sin (shot :angle)) move ))
           new-shot (assoc shot :position [x y])]
-        (set! entities (for [x entities :when (let [pos (x :position) shotX (first pos) shotY (second pos)] 
-        (in-bounds? shotX shotY))] (choose x new-shot (e :id))))))))
+        (set! entities (for [ent entities :when (let [pos (ent :position) shotX (first pos) shotY (second pos)] 
+        (in-bounds? shotX shotY))] (choose ent new-shot (e :id))))))))
 
 (defmethod do-event :player-turn [e]
   (let [angle (e :player-turn)]
