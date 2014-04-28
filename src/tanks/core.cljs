@@ -14,7 +14,7 @@
   (set! tank-id (inc tank-id)) tank-id)
 
 ; TODO: make hash by id
-(def entities [])
+(def entities [{:id (get-id) :type :ant :position [400, 400]}])
 
 (def player {
   :type :player
@@ -59,6 +59,11 @@
 (defmethod draw-entity :shot [p]
   (let [ctx (get-ctx) position (p :position)]
     (.fillRect ctx (first position) (last position) 5 5)))
+
+(defmethod draw-entity :ant [p]
+  (let [ctx (get-ctx) position (p :position)]
+    (.fillRect ctx (first position) (last position) 12 12)))
+
 (defmethod draw-entity :wall [p])
 
 (defn collision? [a b])
@@ -79,6 +84,24 @@
 (defn can-shoot? [t]
   (> (- t (player :last-shot)) 500))
 
+(defn find-first [pred coll]
+  (first (filter pred coll)))
+
+(defn between? [a b]
+   (and (> a b) (< a (+ b 5))))
+
+(defn detect-hit [x y] 
+  (find-first (fn [e] 
+    (let [pos (e :position) aX (first pos) aY (second pos)]
+    (and (or (between? x aX) (between? (+ x 5) aX)  )
+    (or (between? y aY) (between? (+ y 5) aY)  ))
+    )) (filter #(= :ant (%1 :type)) entities)))
+
+(defn remove-entities [ids]
+  (set! entities (for [ent entities :when (not-any? #(= %1 (ent :id)) ids)] ent)))
+
+(defn increase-score [] (set! player (assoc player :score (inc (player :score)) )))
+
 (defmulti do-event #(first (keys %1)))
 (defmethod do-event :default [x])
 (defmethod do-event :shot-move [e]
@@ -90,7 +113,11 @@
           position (shot :position)
           x (+ (first position) (* (cos (shot :angle)) move ))
           y (+ (second position) (* (sin (shot :angle)) move ))
-          new-shot (assoc shot :position [x y])]
+          new-shot (assoc shot :position [x y])
+          hit-ant (apply detect-hit (new-shot :position))
+          ]
+        
+        (when hit-ant (remove-entities [(hit-ant :id) (new-shot :id)]) (increase-score))
         (set! entities (for [ent entities :when (let [pos (ent :position) shotX (first pos) shotY (second pos)] 
         (in-bounds? shotX shotY))] (choose ent new-shot (e :id))))))))
 
@@ -126,7 +153,9 @@
     (do (draw-entity player) (doseq [x entities] (draw-entity x) ) )))
 
 (defn get-world-events [timestamp] 
-   (let [world-events (map #(if (and true (= (%1 :type) :shot)) {:shot-move 4 :id (%1 :id)}) entities)]
+   (let [
+    world-events (map #(if (and true (= (%1 :type) :shot)) {:shot-move 4 :id (%1 :id)}) entities)]
+
     world-events))
 
 (defn handle-events [events] 
