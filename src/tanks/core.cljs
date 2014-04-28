@@ -13,7 +13,6 @@
 (defn get-id []
   (set! tank-id (inc tank-id)) tank-id)
 
-; TODO: make hash by id
 (def entities [{:id (get-id) :type :ant :position [400, 400]}])
 
 (def player {
@@ -66,11 +65,11 @@
 
 (defmethod draw-entity :wall [p])
 
-(defn collision? [a b])
-(defmulti collision :type)
+(defn player-field! [field value]
+  (set! player (assoc player field value)))
 
 (defn player-position! [pos]
-  (set! player (assoc player :position pos)))
+  (player-field! :position pos))
 
 (defn sin [a] (.sin js/Math a))
 (defn cos [a] (.cos js/Math a))
@@ -100,10 +99,34 @@
 (defn remove-entities [ids]
   (set! entities (for [ent entities :when (not-any? #(= %1 (ent :id)) ids)] ent)))
 
-(defn increase-score [] (set! player (assoc player :score (inc (player :score)) )))
+(defn increase-score [] (player-field! :score (inc (player :score))))
 
 (defmulti do-event #(first (keys %1)))
 (defmethod do-event :default [x])
+
+; TODO: refactor
+(defmethod do-event :ant-move [e]
+  (let [
+    id (e :id) 
+    ant (find-first #(= id (%1 :id)) entities) 
+    ]
+    (when ant
+    (let [
+    dist (e :ant-move) 
+    ant-pos (ant :position) 
+    ant-x (first ant-pos)
+    ant-y (second ant-pos)
+    player-pos (player :position)
+    opp (- (first ant-pos) (first player-pos))
+    adj (- (second ant-pos) (second player-pos))
+    angle (.atan js/Math (/ opp adj))
+    new-ant-y (* dist (sin angle))
+    new-ant-x (* dist (cos angle))
+    new-ant (assoc ant :position [(- ant-x new-ant-x) (- ant-y new-ant-y) ])]
+
+    ;(set! entities (for [ent entities] (choose ent new-ant (ent :id) )))
+    ))))
+
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
       shot (first (filter #(= (e :id) (%1 :id)) entities))
@@ -123,7 +146,7 @@
 
 (defmethod do-event :player-turn [e]
   (let [angle (e :player-turn)]
-    (set! player (assoc player :angle (+ angle (player :angle))))))
+    (player-field! :angle (+ angle (player :angle)))))
 
 (defmethod do-event :player-move [e]
   (let [old-position (player :position) 
@@ -144,7 +167,7 @@
         :angle (player :angle) 
         :position [(+ 7 x) (+ 7 y)]
       })))
-    (set! player (assoc player :last-shot t))
+    (player-field! :last-shot t)
     )))
 
 (defn draw-world []
@@ -153,10 +176,10 @@
     (do (draw-entity player) (doseq [x entities] (draw-entity x) ) )))
 
 (defn get-world-events [timestamp] 
-   (let [
-    world-events (map #(if (and true (= (%1 :type) :shot)) {:shot-move 4 :id (%1 :id)}) entities)]
-
-    world-events))
+   (map (fn [ent] ({
+    :shot {:shot-move 4 :id (ent :id)}
+    :ant {:ant-move 3 :id (ent :id)}
+   } (ent :type))) entities))
 
 (defn handle-events [events] 
   (loop [x events]
