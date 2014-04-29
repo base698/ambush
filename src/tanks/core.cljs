@@ -6,14 +6,14 @@
 (def world { 
   :width WIDTH
   :height HEIGHT
-  :entities []
 })
 
 (def tank-id 1)
 (defn get-id []
   (set! tank-id (inc tank-id)) tank-id)
 
-(def entities [{:id (get-id) :type :ant :position [400, 400]}])
+(def first-id (get-id))
+(def entities {first-id {:id first-id :type :ant :position [400, 400]}})
 
 (def player {
   :type :player
@@ -94,10 +94,11 @@
     (let [pos (e :position) aX (first pos) aY (second pos)]
     (and (or (between? x aX) (between? (+ x 5) aX)  )
     (or (between? y aY) (between? (+ y 5) aY)  ))
-    )) (filter #(= :ant (%1 :type)) entities)))
+    )) (filter #(= :ant (%1 :type)) (vals entities))))
+
 
 (defn remove-entities [ids]
-  (set! entities (for [ent entities :when (not-any? #(= %1 (ent :id)) ids)] ent)))
+  (set! entities (apply (partial (dissoc entities)) ids)))
 
 (defn increase-score [] (player-field! :score (inc (player :score))))
 
@@ -108,7 +109,7 @@
 (defmethod do-event :ant-move [e]
   (let [
     id (e :id) 
-    ant (find-first #(= id (%1 :id)) entities) 
+    ant (entities id) 
     ]
     (when ant
     (let [
@@ -129,7 +130,7 @@
 
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
-      shot (first (filter #(= (e :id) (%1 :id)) entities))
+      shot (entities (e :id))
       ]
       (cond shot
         (let [
@@ -139,10 +140,12 @@
           new-shot (assoc shot :position [x y])
           hit-ant (apply detect-hit (new-shot :position))
           ]
-        
         (when hit-ant (remove-entities [(hit-ant :id) (new-shot :id)]) (increase-score))
-        (set! entities (for [ent entities :when (let [pos (ent :position) shotX (first pos) shotY (second pos)] 
-        (in-bounds? shotX shotY))] (choose ent new-shot (e :id))))))))
+        (let [in-bounds-entities (keep #(let [pos (%1 :position) shotX (first pos) shotY (second pos)] (if (in-bounds? shotX shotY ) {(%1 :id) new-shot}) ) 
+              (vals entities))]
+
+        (set! entities (apply merge in-bounds-entities)))))))
+
 
 (defmethod do-event :player-turn [e]
   (let [angle (e :player-turn)]
@@ -160,9 +163,9 @@
 (defmethod do-event :shoot [x]
   (let [t (x :timestamp) x (first (player :position)) y (second (player :position))]
     (when (can-shoot? t) 
-    (let []
-      (set! entities (conj entities {
-        :id (get-id) 
+    (let [id (get-id)]
+      (set! entities (assoc entities id {
+        :id id 
         :type :shot 
         :angle (player :angle) 
         :position [(+ 7 x) (+ 7 y)]
@@ -173,13 +176,13 @@
 (defn draw-world []
   (let [ctx (get-ctx)]
     (.clearRect ctx 0 0 800 600)
-    (do (draw-entity player) (doseq [x entities] (draw-entity x) ) )))
+    (do (draw-entity player) (doseq [x (vals entities)] (draw-entity x) ) )))
 
 (defn get-world-events [timestamp] 
    (map (fn [ent] ({
     :shot {:shot-move 4 :id (ent :id)}
     :ant {:ant-move 3 :id (ent :id)}
-   } (ent :type))) entities))
+   } (ent :type))) (vals entities)))
 
 (defn handle-events [events] 
   (loop [x events]
