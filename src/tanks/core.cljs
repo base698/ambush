@@ -87,7 +87,7 @@
   (first (filter pred coll)))
 
 (defn between? [a b]
-   (and (> a b) (< a (+ b 5))))
+   (and (>= a b) (<= a (+ b 5))))
 
 (defn detect-hit [x y] 
   (find-first (fn [e] 
@@ -95,7 +95,6 @@
     (and (or (between? x aX) (between? (+ x 5) aX)  )
     (or (between? y aY) (between? (+ y 5) aY)  ))
     )) (filter #(= :ant (%1 :type)) (vals entities))))
-
 
 (defn remove-entities [ids]
   (set! entities (apply (partial dissoc entities) ids)))
