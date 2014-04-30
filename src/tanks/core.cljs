@@ -98,7 +98,7 @@
 
 
 (defn remove-entities [ids]
-  (set! entities (apply (partial (dissoc entities)) ids)))
+  (set! entities (apply (partial dissoc entities) ids)))
 
 (defn increase-score [] (player-field! :score (inc (player :score))))
 
@@ -140,11 +140,10 @@
           new-shot (assoc shot :position [x y])
           hit-ant (apply detect-hit (new-shot :position))
           ]
-        (when hit-ant (remove-entities [(hit-ant :id) (new-shot :id)]) (increase-score))
-        (let [in-bounds-entities (keep #(let [pos (%1 :position) shotX (first pos) shotY (second pos)] (if (in-bounds? shotX shotY ) {(%1 :id) new-shot}) ) 
-              (vals entities))]
-
-        (set! entities (apply merge in-bounds-entities)))))))
+        (if hit-ant (do (remove-entities [(hit-ant :id) (new-shot :id)]) (increase-score))
+            (let [in-bounds-entities (keep #(let [pos (%1 :position) shotX (first pos) shotY (second pos)] 
+          (if (in-bounds? shotX shotY ) {(%1 :id) (if (= (new-shot :id) (%1 :id)) new-shot %1)}) ) (vals entities))]
+        (set! entities (apply merge (cons entities in-bounds-entities)))))))))
 
 
 (defmethod do-event :player-turn [e]
@@ -176,7 +175,7 @@
 (defn draw-world []
   (let [ctx (get-ctx)]
     (.clearRect ctx 0 0 800 600)
-    (do (draw-entity player) (doseq [x (vals entities)] (draw-entity x) ) )))
+    (do (draw-entity player) (doseq [x (vals entities)] (do (draw-entity x)) ) )))
 
 (defn get-world-events [timestamp] 
    (map (fn [ent] ({
