@@ -30,6 +30,13 @@
                68 :d 
                32 :space})
 
+
+(defn add-ant []
+  (let [id (get-id) ]
+    (set! entities 
+      (assoc entities 
+        id {:id id :type :ant :position [(rand-int 400) (rand-int 400)]}))))
+
 (def player-key-map {
     :space {:shoot true} 
     :w {:player-move 1.1} 
@@ -71,14 +78,17 @@
 (defn player-position! [pos]
   (player-field! :position pos))
 
+(def PI (.-PI js/Math))
 (defn sin [a] (.sin js/Math a))
+(defn atan [a] (.atan js/Math a))
+(defn atan2 [a] (.atan2 js/Math a))
 (defn cos [a] (.cos js/Math a))
 
 (defn choose [a b id] 
    (if (= id (a :id)) b a))
 
 (defn in-bounds? [x y] 
-  (and (> x 0) (< x WIDTH) (> y 0) (< y HEIGHT)))
+  (and (>= x -10) (< x WIDTH) (>= y -10) (< y HEIGHT)))
 
 (defn can-shoot? [t]
   (> (- t (player :last-shot)) 500))
@@ -101,31 +111,24 @@
 
 (defn increase-score [] (player-field! :score (inc (player :score))))
 
+(defn get-y [ent] (second (:position ent)))
+(defn get-x [ent] (first (:position ent)))
+
 (defmulti do-event #(first (keys %1)))
 (defmethod do-event :default [x])
-
-; TODO: refactor
 (defmethod do-event :ant-move [e]
   (let [
     id (e :id) 
     ant (entities id) 
+    deltaY (- (get-y ant) (get-y player))
+    deltaX (- (get-x ant) (get-x player))
+    angle (* (/ 180 PI) (atan (/ deltaY deltaX)))
+    position (ant :position)
+    x (+ (first position) (* (cos angle) 1 ))
+    y (+ (second position) (* (sin angle) 1 ))
     ]
-    (when ant
-    (let [
-    dist (e :ant-move) 
-    ant-pos (ant :position) 
-    ant-x (first ant-pos)
-    ant-y (second ant-pos)
-    player-pos (player :position)
-    opp (- (first ant-pos) (first player-pos))
-    adj (- (second ant-pos) (second player-pos))
-    angle (.atan js/Math (/ opp adj))
-    new-ant-y (* dist (sin angle))
-    new-ant-x (* dist (cos angle))
-    new-ant (assoc ant :position [(- ant-x new-ant-x) (- ant-y new-ant-y) ])]
-
-    ;(set! entities (for [ent entities] (choose ent new-ant (ent :id) )))
-    ))))
+    (set! entities (assoc entities id (assoc ant :position [x y]))) 
+    ))
 
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
@@ -199,6 +202,7 @@
 
 (defn ^:export main []
   (def keypresses {})
+  (.setInterval js/window #(add-ant) 8000)
   ((fn render-loop [timestamp] 
     (update-world keypresses timestamp) (draw-world)  
       (.requestAnimationFrame js/window render-loop)))
