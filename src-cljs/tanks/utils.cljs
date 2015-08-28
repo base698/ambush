@@ -15,7 +15,7 @@
    
 (def directions [:north-east :north-west :south-west :south-east])
 
-(defrecord Box [x y w h])
+(defrecord Rect [x y w h])
 (defrecord Point [x y])
 
 (defn contained-in? [box p]
@@ -27,10 +27,10 @@
   "return four new boxes contained within box"
   (let [{x :x y :y w :w h :h } box h2 (Math/floor (/ h 2)) w2 (Math/floor (/ w 2))]
   {
-   :north-west (quad-tree 3 (Box. x y w2 h2))
-   :north-east (quad-tree 3 (Box. (+ x w2) y w2 h2))
-   :south-east (quad-tree 3 (Box. (+ x w2) (+ y h2) w2 h2))
-   :south-west (quad-tree 3 (Box. x (+ y h2) w2 h2))
+   :north-west (quad-tree 3 (Rect x y w2 h2))
+   :north-east (quad-tree 3 (Rect (+ x w2) y w2 h2))
+   :south-east (quad-tree 3 (Rect (+ x w2) (+ y h2) w2 h2))
+   :south-west (quad-tree 3 (Rect x (+ y h2) w2 h2))
   }))
 
 ; find nested update-in like find
