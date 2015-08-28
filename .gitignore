@@ -1,1 +1,3 @@
-out/tanks.js
+out
+target
+.lein-repl-history
