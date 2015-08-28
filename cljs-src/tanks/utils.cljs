@@ -72,6 +72,7 @@
              the-tree (first (vals found))]
            (assoc new-node quad (quad-tree-insert the-tree x y)) ))))
           
+
 (def root (quad-tree 3 (Box. 0 0 100 100)))
 (def regions (merge-with root (sub-divide (root :box)))
 (def root-with-directions (merge-with (fn [x y] y) (quad-tree 3 root) (sub-divide (root :box))))
