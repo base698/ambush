@@ -1,5 +1,8 @@
 (ns tanks.utils) 
 
+(defn log [str]
+  (prn str))
+
 (defn quad-tree [max b]
   { :points []
     :max max
@@ -56,8 +59,6 @@
           :let [item (first (vals x))]
           :when (in-tree? p item)] x)))
 
-(find-quadrant root-with-directions {:x 25 :y 25})
-
 (defn quad-tree-insert [node x y]
   (let [box (node :box) p {:x x :y y}]
     (cond (can-add? node p)
@@ -72,8 +73,3 @@
              the-tree (first (vals found))]
            (assoc new-node quad (quad-tree-insert the-tree x y)) ))))
           
-
-(def root (quad-tree 3 (Box. 0 0 100 100)))
-(def regions (merge-with root (sub-divide (root :box)))
-(def root-with-directions (merge-with (fn [x y] y) (quad-tree 3 root) (sub-divide (root :box))))
-(def root-a (atom root))
