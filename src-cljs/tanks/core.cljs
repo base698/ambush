@@ -8,6 +8,8 @@
   :height HEIGHT
 })
 
+(def x 1)
+
 (def tank-id 1)
 (defn get-id []
   (set! tank-id (inc tank-id)) tank-id)
