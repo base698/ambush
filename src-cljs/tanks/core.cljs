@@ -1,5 +1,5 @@
 (ns tanks.core
- (:use [tanks.utils :only [log]]))
+ (:require [tanks.utils :refer [log]]))
 
 (def WIDTH 800)
 (def HEIGHT 600)
@@ -11,6 +11,7 @@
 (def x 1)
 
 (def tank-id 1)
+
 (defn get-id []
   (set! tank-id (inc tank-id)) tank-id)
 
@@ -20,17 +21,18 @@
 (def player {
   :type :player
   :score 0
+  :color "#072"
   :health 100
   :position [200,200]
   :angle 0
   :last-shot 0
   :bombs 1})
 
-(def key-map { 87 :w 
-               83 :s 
-               65 :a 
-               68 :d 
-               32 :space})
+(defonce key-map { 87 :w 
+                   83 :s 
+                   65 :a 
+                   68 :d 
+                   32 :space})
 
 
 (defn add-ant []
@@ -58,6 +60,7 @@
 (defmethod draw-entity :player [p]
   (let [ctx (get-ctx) position (p :position) x (first position) y (second position)]
     (.save ctx)
+    (set! (.-fillStyle ctx) (player :color))
     (.translate ctx (+ x  (/ 20 2)) (+ y (/ 20 2)))
     (.rotate ctx (player :angle))
     (.fillRect ctx -10 -10 20 20)
@@ -74,6 +77,7 @@
 
 (defmethod draw-entity :wall [p])
 
+; TODO: do swap
 (defn player-field! [field value]
   (set! player (assoc player field value)))
 
@@ -137,13 +141,11 @@
       shot (entities (e :id))
       ]
       (cond shot
-        (let [
-          position (shot :position)
-          x (+ (first position) (* (cos (shot :angle)) move ))
-          y (+ (second position) (* (sin (shot :angle)) move ))
-          new-shot (assoc shot :position [x y])
-          hit-ant (apply detect-hit (new-shot :position))
-          ]
+        (let [position (shot :position)
+              x (+ (first position) (* (cos (shot :angle)) move ))
+              y (+ (second position) (* (sin (shot :angle)) move ))
+              new-shot (assoc shot :position [x y])
+              hit-ant (apply detect-hit (new-shot :position))]
         (if hit-ant (do (remove-entities [(hit-ant :id) (new-shot :id)]) (increase-score))
             (let [in-bounds-entities (keep #(let [pos (%1 :position) shotX (first pos) shotY (second pos)] 
           (if (in-bounds? shotX shotY ) {(%1 :id) (if (= (new-shot :id) (%1 :id)) new-shot %1)}) ) (vals entities))]
@@ -179,12 +181,16 @@
 (defn draw-world []
   (let [ctx (get-ctx)]
     (.clearRect ctx 0 0 800 600)
-    (do (draw-entity player) (doseq [x (vals entities)] (do (draw-entity x)) ) )))
+    (do (draw-entity player)
+        (doseq [x (vals entities)]
+          (do (draw-entity x))))))
 
 (defn get-world-events [timestamp] 
    (map (fn [ent] ({
-    :shot {:shot-move 4 :id (ent :id)}
-    :ant {:ant-move 3 :id (ent :id)}
+                    :shot {:shot-move 4
+                           :id (ent :id)}
+                    :ant {:ant-move 3
+                          :id (ent :id)}
    } (ent :type))) (vals entities)))
 
 (defn handle-events [events] 
@@ -194,26 +200,35 @@
       (recur (rest x)))))
 
 (defn update-world [keypresses timestamp]
-    (let [
-      press-list (seq (select-keys keypresses (for [[k v] keypresses :when v] k)))
-      player-events (->> press-list
-        (map #(player-key-map (first %1)))
-        (map #(assoc %1 :timestamp timestamp)))
-      world-events (get-world-events timestamp)]
-     (handle-events (concat player-events world-events))) )
+  (let [press-list (seq
+                    (select-keys
+                     keypresses
+                     (for [[k v] keypresses :when v] k)))
+          player-events (->> press-list
+                             (map #(player-key-map (first %1)))
+                             (map #(assoc %1 :timestamp timestamp)))
+                             world-events (get-world-events timestamp)]
+                             (handle-events (concat player-events world-events))))
 
-(defn ^:export main []
-  (def keypresses {})
-  (.setInterval js/window #(add-ant) 8000)
-  ((fn render-loop [timestamp] 
-    (update-world keypresses timestamp) (draw-world)  
-      (.requestAnimationFrame js/window render-loop)))
-  (.addEventListener js/window "keydown" 
-    #(set! keypresses 
-        (assoc keypresses 
-          (key-map (aget %1 "keyCode")) true)))
-  (.addEventListener js/window "keyup" 
-      #(set! keypresses 
-        (assoc keypresses 
-          (key-map (aget %1 "keyCode")) false))))
+(defn explosion-at [x y])
+
+  
+(defn main []
+    ;(let [keypresses (atom {})]
+    ; (.setInterval js/window add-ant 8000)
+    (def keypresses {})
+    ((fn render-loop [timestamp] 
+        (update-world keypresses timestamp) (draw-world)  
+        (.requestAnimationFrame js/window render-loop)))
+
+    (.addEventListener js/window "keydown" 
+        #(set! keypresses 
+            (assoc keypresses 
+            (key-map (aget %1 "keyCode")) true)))
+    (.addEventListener js/window "keyup" 
+        #(set! keypresses 
+            (assoc keypresses 
+            (key-map (aget %1 "keyCode")) false))))
+
+(.log js/console "hi")
 
