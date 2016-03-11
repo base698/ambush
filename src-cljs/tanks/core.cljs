@@ -40,12 +40,11 @@
       (assoc entities 
         id {:id id :type :ant :position [(rand-int 400) (rand-int 400)]}))))
 
-(def player-key-map {
-    :space {:shoot true} 
-    :w {:player-move 1.1} 
-    :s {:player-move -1.1} 
-    :a {:player-turn -0.1} 
-    :d {:player-turn 0.1}})
+(defonce player-key-map {:space {:shoot true} 
+                         :w {:player-move 1.1} 
+                         :s {:player-move -1.1} 
+                         :a {:player-turn -0.1} 
+                         :d {:player-turn 0.1}})
 
 (defn ease-in-quad [x t b c d]
     (+ (* c (/ t d) (/ t d)) b))
@@ -55,6 +54,8 @@
   ctx))
 
 (defmulti draw-entity :type)
+
+(defmethod draw-entity :shrapnel [p])
 
 (defmethod draw-entity :player [p]
   (let [ctx (get-ctx) position (p :position) x (first position) y (second position)]
@@ -76,7 +77,6 @@
 
 (defmethod draw-entity :wall [p])
 
-; TODO: do swap
 (defn player-field! [field value]
   (swap! player assoc field value))
 
@@ -229,5 +229,4 @@
             (assoc keypresses 
             (key-map (aget %1 "keyCode")) false))))
 
-(.log js/console "hi")
 
