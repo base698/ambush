@@ -122,18 +122,15 @@
 (defmulti do-event #(first (keys %1)))
 (defmethod do-event :default [x])
 (defmethod do-event :ant-move [e]
-  (let [
-    id (e :id) 
-    ant (entities id) 
-    deltaY (- (get-y ant) (get-y @player))
-    deltaX (- (get-x ant) (get-x @player))
-    angle (* (/ 180 PI) (atan (/ deltaY deltaX)))
-    position (ant :position)
-    x (+ (first position) (* (cos angle) 1 ))
-    y (+ (second position) (* (sin angle) 1 ))
-    ]
-    (set! entities (assoc entities id (assoc ant :position [x y]))) 
-    ))
+  (let [id (e :id) 
+        ant (entities id) 
+        deltaY (- (get-y ant) (get-y @player))
+        deltaX (- (get-x ant) (get-x @player))
+        angle (* (/ 180 PI) (atan (/ deltaY deltaX)))
+        position (ant :position)
+        x (+ (first position) (* (cos angle) 1 ))
+        y (+ (second position) (* (sin angle) 1 ))]
+    (set! entities (assoc entities id (assoc ant :position [x y])))))
 
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
@@ -215,18 +212,16 @@
 (defn main []
     ;(let [keypresses (atom {})]
     ; (.setInterval js/window add-ant 8000)
-    (def keypresses {})
-    ((fn render-loop [timestamp] 
-        (update-world keypresses timestamp) (draw-world)  
-        (.requestAnimationFrame js/window render-loop)))
+    (let [keypresses (atom {})]
+        ((fn render-loop [timestamp]
+            (update-world @keypresses timestamp) (draw-world)
+            (.requestAnimationFrame js/window render-loop)))
 
-    (.addEventListener js/window "keydown" 
-        #(set! keypresses 
-            (assoc keypresses 
-            (key-map (aget %1 "keyCode")) true)))
-    (.addEventListener js/window "keyup" 
-        #(set! keypresses 
-            (assoc keypresses 
-            (key-map (aget %1 "keyCode")) false))))
-
-
+        (.addEventListener js/window "keydown"
+            #(swap! keypresses
+                    assoc
+                    (key-map (aget %1 "keyCode")) true))
+        (.addEventListener js/window "keyup"
+            #(swap! keypresses
+                assoc
+                (key-map (aget %1 "keyCode")) false))))
