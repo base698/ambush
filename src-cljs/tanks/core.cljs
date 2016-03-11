@@ -18,15 +18,14 @@
 (def first-id (get-id))
 (def entities {first-id {:id first-id :type :ant :position [400, 400]}})
 
-(def player {
-  :type :player
-  :score 0
-  :color "#072"
-  :health 100
-  :position [200,200]
-  :angle 0
-  :last-shot 0
-  :bombs 1})
+(def player (atom {:type :player
+                   :score 0
+                   :color "#072"
+                   :health 100
+                   :position [200,200]
+                   :angle 0
+                   :last-shot 0
+                   :bombs 1}))
 
 (defonce key-map { 87 :w 
                    83 :s 
@@ -60,9 +59,9 @@
 (defmethod draw-entity :player [p]
   (let [ctx (get-ctx) position (p :position) x (first position) y (second position)]
     (.save ctx)
-    (set! (.-fillStyle ctx) (player :color))
+    (set! (.-fillStyle ctx) (@player :color))
     (.translate ctx (+ x  (/ 20 2)) (+ y (/ 20 2)))
-    (.rotate ctx (player :angle))
+    (.rotate ctx (@player :angle))
     (.fillRect ctx -10 -10 20 20)
     (.fillRect ctx 8 -2 5 5)
     (.restore ctx)))
@@ -79,7 +78,7 @@
 
 ; TODO: do swap
 (defn player-field! [field value]
-  (set! player (assoc player field value)))
+  (swap! player assoc field value))
 
 (defn player-position! [pos]
   (player-field! :position pos))
@@ -97,7 +96,7 @@
   (and (>= x -10) (< x WIDTH) (>= y -10) (< y HEIGHT)))
 
 (defn can-shoot? [t]
-  (> (- t (player :last-shot)) 500))
+  (> (- t (@player :last-shot)) 500))
 
 (defn find-first [pred coll]
   (first (filter pred coll)))
@@ -115,7 +114,7 @@
 (defn remove-entities [ids]
   (set! entities (apply (partial dissoc entities) ids)))
 
-(defn increase-score [] (player-field! :score (inc (player :score))))
+(defn increase-score [] (swap! player update-in [:score] inc))
 
 (defn get-y [ent] (second (:position ent)))
 (defn get-x [ent] (first (:position ent)))
@@ -126,8 +125,8 @@
   (let [
     id (e :id) 
     ant (entities id) 
-    deltaY (- (get-y ant) (get-y player))
-    deltaX (- (get-x ant) (get-x player))
+    deltaY (- (get-y ant) (get-y @player))
+    deltaX (- (get-x ant) (get-x @player))
     angle (* (/ 180 PI) (atan (/ deltaY deltaX)))
     position (ant :position)
     x (+ (first position) (* (cos angle) 1 ))
@@ -138,8 +137,7 @@
 
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
-      shot (entities (e :id))
-      ]
+      shot (entities (e :id))]
       (cond shot
         (let [position (shot :position)
               x (+ (first position) (* (cos (shot :angle)) move ))
@@ -154,25 +152,25 @@
 
 (defmethod do-event :player-turn [e]
   (let [angle (e :player-turn)]
-    (player-field! :angle (+ angle (player :angle)))))
+    (player-field! :angle (+ angle (@player :angle)))))
 
 (defmethod do-event :player-move [e]
-  (let [old-position (player :position) 
+  (let [old-position (@player :position) 
         move (e :player-move)
-        x (* (cos (player :angle)) move )
-        y (* (sin (player :angle)) move )
+        x (* (cos (@player :angle)) move )
+        y (* (sin (@player :angle)) move )
         arr [[x y] old-position]
         new-position [(+ x (first old-position)) (+ y (second old-position)) ]]
     (player-position! new-position)))
 
 (defmethod do-event :shoot [x]
-  (let [t (x :timestamp) x (first (player :position)) y (second (player :position))]
+  (let [t (x :timestamp) x (first (@player :position)) y (second (@player :position))]
     (when (can-shoot? t) 
     (let [id (get-id)]
       (set! entities (assoc entities id {
         :id id 
         :type :shot 
-        :angle (player :angle) 
+        :angle (@player :angle) 
         :position [(+ 7 x) (+ 7 y)]
       })))
     (player-field! :last-shot t)
@@ -181,7 +179,7 @@
 (defn draw-world []
   (let [ctx (get-ctx)]
     (.clearRect ctx 0 0 800 600)
-    (do (draw-entity player)
+    (do (draw-entity @player)
         (doseq [x (vals entities)]
           (do (draw-entity x))))))
 
@@ -210,7 +208,8 @@
                              world-events (get-world-events timestamp)]
                              (handle-events (concat player-events world-events))))
 
-(defn explosion-at [x y])
+(defn explosion-at [x y]
+  )
 
   
 (defn main []
