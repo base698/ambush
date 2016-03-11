@@ -10,6 +10,8 @@
 
 (def x 1)
 
+(enable-console-print!)
+
 (def tank-id 1)
 
 (defn get-id []
@@ -120,7 +122,10 @@
 (defn get-x [ent] (first (:position ent)))
 
 (defmulti do-event #(first (keys %1)))
+
 (defmethod do-event :default [x])
+
+; {:ant-move 3, :id 2}
 (defmethod do-event :ant-move [e]
   (let [id (e :id) 
         ant (entities id) 
