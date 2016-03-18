@@ -27,15 +27,21 @@
    :color c
    :health 100
    :position p
+   :w 20
+   :h 20
    :angle 0
    :last-shot 0
    :bombs 1})
 
-(def player (atom (get-player [200, 200] "#072")))
+(def player (get-player [200, 200] "#072"))
 
-(def entities (atom {first-id
+(def entities (atom {(player :id) player
+                     first-id
                      {:id first-id
                       :type :ant
+                      :w 10
+                      :h 10
+                      :health 10
                       :position [400, 400]}}))
 
 
@@ -53,6 +59,8 @@
       assoc entities 
       id {:id id
           :type :ant
+          :w 10
+          :h 10
           :position [(rand-int 400) (rand-int 400)]})))
 
 ;; todo finish
@@ -84,24 +92,28 @@
   (let [ctx (get-ctx)
         position (p :position)
         x (first position)
-        y (second position)]
+        y (second position)
+        w (p :w)
+        h (p :h)]
     (.save ctx)
     (set! (.-fillStyle ctx) (p :color))
-    (.translate ctx (+ x  (/ 20 2)) (+ y (/ 20 2)))
+    (.translate ctx (+ x  (/ w 2)) (+ y (/ h 2)))
     (.rotate ctx (p :angle))
-    (.fillRect ctx -10 -10 20 20)
+    (.fillRect ctx -10 -10 w h)
     (.fillRect ctx 8 -2 5 5)
     (.restore ctx)))
 
 (defmethod draw-entity :shot [e]
-  (let [ctx (get-ctx) position (e :position)
-        [x y w h] position]
-    (prn x y w h)
+  (let [ctx (get-ctx)
+        position (e :position)
+        [x y] position
+        w (e :w)
+        h (e :h)]
     (.fillRect ctx x y w h)))
 
 (defmethod draw-entity :ant [p]
   (let [ctx (get-ctx) position (p :position)]
-    (.fillRect ctx (first position) (last position) 12 12)))
+    (.fillRect ctx (first position) (last position) (p :w) (p :h))))
 
 (defmethod draw-entity :wall [p])
 
@@ -128,8 +140,6 @@
 
 (defn between? [a b]
    (and (>= a b) (<= a (+ b 5))))
-
-(defn inc-score [] (swap! player update-in [:score] inc))
 
 (defn get-y [ent] (second (:position ent)))
 
@@ -162,21 +172,48 @@
           (swap! entities assoc-in [(e :id) :position] [x y w h])))
 
 (defmethod do-event :player-turn [e]
-  (let [angle (e :player-turn)]
-    (player-field! :angle (+ angle (@player :angle)))))
+  (let [player (e :player)
+        pid (player :id)
+        angle (e :player-turn)]
+    (swap! entities assoc-in [pid :angle]
+           (+ angle (player :angle)))))
+
+(defmethod do-event :damage [e]
+  (let [id (get-in e [:entity :id])
+        val (e :val)]
+    (swap! entities update-in [id :health] #(- %1 val))
+    (if (<= (get-in @entities [id :health]) 0)
+      {:type :death :entity (@entities id)}
+      nil)))
+
+;; better death handling
+(defmethod do-event :death [e]
+  (swap! entities dissoc (get-in e [:entity :id]))
+  (prn e))
+
+(defmethod do-event :hit [e]
+  (let [{shot-id :shot-id
+         from-player-id :from-player
+         hit-entity :to} e]
+    (swap! entities update-in
+           [from-player-id :score] (partial + 5))
+    (swap! entities dissoc shot-id)
+    {:type :damage :val 5 :entity hit-entity}))
 
 (defmethod do-event :player-move [e]
-  (let [old-position (@player :position) 
+  (let [p (e :player)
+        old-position (p :position) 
         move (e :player-move)
-        x (* (cos (@player :angle)) move )
-        y (* (sin (@player :angle)) move )
+        x (* (cos (p :angle)) move )
+        y (* (sin (p :angle)) move )
         arr [[x y] old-position]
         new-position [(+ x (first old-position)) (+ y (second old-position)) ]]
-    (player-position! new-position)))
+    (swap! entities assoc-in [(p :id) :position] new-position)))
 
 (defmethod do-event :shoot [e]
   (let [t (e :timestamp)
         player (:player e)
+        id (:id player)
         x (get-in player [:position 0])
         y (get-in player [:position 1])]
     (when (can-shoot? player t) 
@@ -186,24 +223,22 @@
           :type :shot 
           :from-player (player :id)
           :angle (player :angle) 
-          :position [(+ 7 x) (+ 7 y) 4 4]}))
-        (player-field! :last-shot t))))
-
-(defmethod do-event :player-hit [e]
-  (let [{damage :player-hit hitee :hitee} e]
-    (prn damage hitee)))
+          :w 4
+          :h 4
+          :position [(+ 7 x) (+ 7 y)]}))
+      (swap! entities assoc-in [id :last-shot] t))))
 
 (defn draw-world []
   (let [ctx (get-ctx)]
     (.clearRect ctx 0 0 800 600)
-    (do (draw-entity @player)
+    (do ;(draw-entity @player)
         (doseq [x (vals @entities)]
           (do (draw-entity x))))))
 
 ; these are events that just happen 
 (defn get-world-events [timestamp] 
   (map (fn [ent]
-         ({:shot {:type :shot-move :shot-move 4
+         ({:shot {:type :shot-move :shot-move 3
                   :id (ent :id)}
            ; :ant {:ant-move 3
            ; :id (ent :id)}
@@ -214,28 +249,40 @@
       (handle-events
        (keep do-event events))))
 
-;; (defn within? [p q]
-;;   (let [[x1 y1] p
-;;         [x2 y2] q]
-;;     (
-;; (defn hit? [a b]
-;;   (within? (a :position) (b :position)))
-
-;; see if another player was struck
-;; (defn detect-hits [shots entities]
-;;   (remove nil? (mapcat (fn [e]
-;;     (map #(if (and (not= (%1 :from-player ) (e :id))
-;;                    (hit? e %1)) {:player-hit 10
-;;                                  :shooter (%1 :from-player)
-;;                                  :hitee (e :id)}) shots)
-;;          ) entities)))
-
-
+(defn within? [p q]
+  (let [[px1 py1] (p :position)
+        pw (p :w)
+        ph (p :h)
+        px2 (+ px1 pw)
+        py2 (+ py1 ph)
+        [qx1 qy1] (q :position)
+        qw (q :w)
+        qh (q :h)
+        qx2 (+ qx1 qw)
+        qy2 (+ qy1 qh)]
+    (and (< px1 qx2)
+         (> px2 qx1)
+         (< py1 qy2)
+         (> py2 py1))))
+     
 (defn get-shots [entities]
   (filter #(= :shot (%1 :type)) (vals entities)))
 
-(defn get-entities [entities]
+(defn get-players-and-walls [entities]
   (remove #(= :shot (%1 :type)) (vals entities)))
+
+;; lame hit-detection
+(defn detect-hits []
+  (mapcat (fn [s]
+            (keep #(if (do (and (not= (%1 :id) (get-in s [:from-player]))
+                            (within? s %1)))
+                     {:type :hit
+                      :shot-id (s :id)
+                      :from-player (s :from-player)
+                      :to %1}
+                    nil)
+                 (get-players-and-walls @entities))
+            ) (get-shots @entities)))
 
 (defn oob? [p]
   (let [[x y] p]
@@ -257,12 +304,14 @@
                      (for [[k v] keypresses :when v] k)))
         player-events (->> press-list
                            (map #(player-key-map (first %1)))
-                           (map #(assoc %1 :timestamp timestamp :player @player)))
+                           (map #(assoc %1
+                                        :timestamp timestamp
+                                        :player (@entities (player :id)))))
         world-events (get-world-events timestamp)]
     (do 
         (handle-events player-events)
         (handle-events world-events)
-        ;(detect-hits (get-shots @entities) (get-entities @entities))
+        (handle-events (detect-hits)) ; (get-shots @entities) (get-entities @entities))
         (detect-shot-oob (get-shots @entities)))))
 
   
