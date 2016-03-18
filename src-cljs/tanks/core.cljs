@@ -11,8 +11,6 @@
   :height HEIGHT
 })
 
-(def x 1)
-
 (def tank-id 1)
 
 (defn get-id []
@@ -64,11 +62,11 @@
     (swap! entities assoc id player)))
 
 
-(defonce player-key-map {:space {:shoot true} 
-                         :w {:player-move 1.1} 
-                         :s {:player-move -1.1} 
-                         :a {:player-turn -0.1} 
-                         :d {:player-turn 0.1}})
+(defonce player-key-map {:space {:type :shoot} 
+                         :w {:type :player-move :player-move 1.1} 
+                         :s {:type :player-move :player-move -1.1} 
+                         :a {:type :player-turn :player-turn -0.1} 
+                         :d {:type :player-turn :player-turn 0.1}})
 
 (defn ease-in-quad [x t b c d]
     (+ (* c (/ t d) (/ t d)) b))
@@ -95,9 +93,11 @@
     (.fillRect ctx 8 -2 5 5)
     (.restore ctx)))
 
-(defmethod draw-entity :shot [p]
-  (let [ctx (get-ctx) position (p :position)]
-    (.fillRect ctx (first position) (last position) 5 5)))
+(defmethod draw-entity :shot [e]
+  (let [ctx (get-ctx) position (e :position)
+        [x y w h] position]
+    (prn x y w h)
+    (.fillRect ctx x y w h)))
 
 (defmethod draw-entity :ant [p]
   (let [ctx (get-ctx) position (p :position)]
@@ -120,8 +120,8 @@
 (defn in-bounds? [x y] 
   (and (>= x -10) (< x WIDTH) (>= y -10) (< y HEIGHT)))
 
-(defn can-shoot? [t]
-  (> (- t (@player :last-shot)) 500))
+(defn can-shoot? [p t]
+  (> (- t (p :last-shot)) 750))
 
 (defn find-first [pred coll]
   (first (filter pred coll)))
@@ -135,29 +135,31 @@
 
 (defn get-x [ent] (first (:position ent)))
 
-(defmulti do-event #(first (keys %1)))
+(defmulti do-event (fn [e]
+                     (:type e)))
 
 (defmethod do-event :default [x])
 
 ; {:ant-move 3, :id 2}
-(defmethod do-event :ant-move [e]
-  (let [id (e :id) 
-        ant (@entities id) 
-        deltaY (- (get-y ant) (get-y @player))
-        deltaX (- (get-x ant) (get-x @player))
-        angle (* (/ 180 PI) (atan (/ deltaY deltaX)))
-        position (ant :position)
-        x (+ (first position) (* (cos angle) 1 ))
-        y (+ (second position) (* (sin angle) 1 ))]
-    (swap! entities assoc-in [id :position] [x y])))
+;; (defmethod do-event :ant-move [e]
+;;   (let [id (e :id) 
+;;         ant (@entities id) 
+;;         deltaY (- (get-y ant) (get-y @player))
+;;         deltaX (- (get-x ant) (get-x @player))
+;;         angle (* (/ 180 PI) (atan (/ deltaY deltaX)))
+;;         position (ant :position)
+;;         x (+ (first position) (* (cos angle) 1 ))
+;;         y (+ (second position) (* (sin angle) 1 ))]
+;;     (swap! entities assoc-in [id :position] [x y])))
 
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
           shot (@entities (e :id))
           position (shot :position)
-          x (+ (first position) (* (cos (shot :angle)) move ))
-          y (+ (second position) (* (sin (shot :angle)) move ))]
-          (swap! entities assoc-in [(e :id) :position] [x y])))
+          [x y w h] position
+          x (+ x (* (cos (shot :angle)) move ))
+          y (+ y (* (sin (shot :angle)) move ))]
+          (swap! entities assoc-in [(e :id) :position] [x y w h])))
 
 (defmethod do-event :player-turn [e]
   (let [angle (e :player-turn)]
@@ -174,17 +176,22 @@
 
 (defmethod do-event :shoot [e]
   (let [t (e :timestamp)
-        x (get-in @player [:position 0])
-        y (get-in @player [:position 1])]
-    (when (can-shoot? t) 
+        player (:player e)
+        x (get-in player [:position 0])
+        y (get-in player [:position 1])]
+    (when (can-shoot? player t) 
       (let [id (get-id)]
         (swap! entities assoc id {
           :id id 
           :type :shot 
-          :from-player (@player :id)
-          :angle (@player :angle) 
-          :position [(+ 7 x) (+ 7 y)]}))
+          :from-player (player :id)
+          :angle (player :angle) 
+          :position [(+ 7 x) (+ 7 y) 4 4]}))
         (player-field! :last-shot t))))
+
+(defmethod do-event :player-hit [e]
+  (let [{damage :player-hit hitee :hitee} e]
+    (prn damage hitee)))
 
 (defn draw-world []
   (let [ctx (get-ctx)]
@@ -196,26 +203,39 @@
 ; these are events that just happen 
 (defn get-world-events [timestamp] 
   (map (fn [ent]
-         ({:shot {:shot-move 4
+         ({:shot {:type :shot-move :shot-move 4
                   :id (ent :id)}
            ; :ant {:ant-move 3
            ; :id (ent :id)}
    } (ent :type))) (vals @entities)))
 
 (defn handle-events [events] 
-  (loop [x events]
-      (do-event (first x))
-      (if (empty? x) nil
-      (recur (rest x)))))
+  (if (empty? events) nil
+      (handle-events
+       (keep do-event events))))
+
+;; (defn within? [p q]
+;;   (let [[x1 y1] p
+;;         [x2 y2] q]
+;;     (
+;; (defn hit? [a b]
+;;   (within? (a :position) (b :position)))
 
 ;; see if another player was struck
-(defn detect-hits [shots]
-  (let [x 1]
-    ;(prn shots)
-    ))        
+;; (defn detect-hits [shots entities]
+;;   (remove nil? (mapcat (fn [e]
+;;     (map #(if (and (not= (%1 :from-player ) (e :id))
+;;                    (hit? e %1)) {:player-hit 10
+;;                                  :shooter (%1 :from-player)
+;;                                  :hitee (e :id)}) shots)
+;;          ) entities)))
+
 
 (defn get-shots [entities]
   (filter #(= :shot (%1 :type)) (vals entities)))
+
+(defn get-entities [entities]
+  (remove #(= :shot (%1 :type)) (vals entities)))
 
 (defn oob? [p]
   (let [[x y] p]
@@ -237,13 +257,12 @@
                      (for [[k v] keypresses :when v] k)))
         player-events (->> press-list
                            (map #(player-key-map (first %1)))
-                           (map #(assoc %1 :timestamp timestamp)))
+                           (map #(assoc %1 :timestamp timestamp :player @player)))
         world-events (get-world-events timestamp)]
     (do 
-        ;; TODO collision detection
         (handle-events player-events)
         (handle-events world-events)
-        (detect-hits (get-shots @entities))
+        ;(detect-hits (get-shots @entities) (get-entities @entities))
         (detect-shot-oob (get-shots @entities)))))
 
   
