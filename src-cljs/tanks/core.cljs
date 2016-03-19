@@ -11,14 +11,12 @@
   :height HEIGHT
 })
 
-(def tank-id 1)
+(def entity-id 1)
 
 (defn get-id []
-  (set! tank-id (inc tank-id)) tank-id)
+  (set! entity-id (inc entity-id)) entity-id)
 
-(def first-id (get-id))
-
-(defonce events (atom #{}))
+(defonce first-id (get-id))
 
 (defn get-player [p c]
   {:id (get-id)
@@ -34,6 +32,8 @@
    :bombs 1})
 
 (def player (get-player [200, 200] "#072"))
+
+(defonce keypresses (atom {}))
 
 (def entities (atom {(player :id) player
                      first-id
@@ -317,19 +317,27 @@
         (handle-events (detect-hits)) ; (get-shots @entities) (get-entities @entities))
         (detect-shot-oob (get-shots @entities)))))
 
-  
-(defn main []
-    ; (.setInterval js/window add-ant 8000)
-    (let [keypresses (atom {})]
-        ((fn render-loop [timestamp]
-           (update-world @keypresses timestamp)
-           (draw-world)
-            (.requestAnimationFrame js/window render-loop)))
-        (.addEventListener js/window "keydown"
-            #(swap! keypresses
-                    assoc
-                    (key-map (aget %1 "keyCode")) true))
-        (.addEventListener js/window "keyup"
-            #(swap! keypresses
-                assoc
-                (key-map (aget %1 "keyCode")) false))))
+(defn start []
+   ;(.setInterval js/window add-ant 8000)
+   (println "start called")
+   ((fn render-loop [timestamp]
+       (update-world @keypresses timestamp)
+       (draw-world)
+       (.requestAnimationFrame js/window render-loop))))
+
+(defonce main
+  (do
+    ;(.addEventListener js/window "click")
+    (.addEventListener (.getElementById js/document "start")
+                       "click" (comp (fn [a]
+                                       (.blur (.getElementById js/document "start")))
+                                     start) )
+    (.addEventListener js/window "keydown"
+       #(do (swap! keypresses
+               assoc
+               (key-map (aget %1 "keyCode")) true) false))
+    (.addEventListener js/window "keyup"
+       #(swap! keypresses
+               assoc
+               (key-map (aget %1 "keyCode")) false))))
+
