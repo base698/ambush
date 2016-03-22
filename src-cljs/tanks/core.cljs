@@ -1,5 +1,7 @@
 (ns tanks.core
- (:require [tanks.utils :refer [log]]))
+  (:require
+    [reagent.core :as r]
+    [tanks.utils :refer [log]]))
 
 (enable-console-print!)
 
@@ -80,6 +82,7 @@
           :h 10
           :health 10
           :position [(rand-int 400) (rand-int 400)]})))
+
 
 ;; todo finish
 (defn add-player []

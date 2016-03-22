@@ -3,6 +3,7 @@
   :clean-targets [:target-path "out"]
   :dependencies [
     [org.clojure/clojure "1.8.0"]
+    [reagent "0.6.0-alpha"]
     [org.clojure/clojurescript "1.7.228"]]
   :cljsbuild {
     :builds [{
