@@ -20,22 +20,42 @@
 
 (defonce first-id (get-id))
 
-(defn get-player [p c]
+(def time-now (atom 0.0))
+
+(defn get-shrapnel [p c s a]
   {:id (get-id)
-   :type :player
-   :score 0
-   :color c
-   :health 100
+   :type :shrapnel
+   :time-in @time-now
+   :expire-length (rand-int 2000)
+   :w 3
+   :h 3
+   :speed s
+   :angle a
    :position p
-   :w 20
-   :h 20
-   :angle 0
-   :last-shot 0
-   :bombs 1})
+   :color c})
+
+(defn get-player [p c]
+  (let [p {:id (get-id)
+           :type :player
+           :score 0
+           :color c
+           :speed 0.9
+           :health 100
+           :position p
+           :w 20
+           :h 20
+           :angle 0
+           :time-between-shots 850
+           :last-shot 0
+           :bombs 1}]
+    p))
+
 
 (def player (get-player [200, 200] "#072"))
 
 (defonce keypresses (atom {}))
+
+(def ai-agents (atom []))
 
 (def entities (atom {(player :id) player
                      first-id
@@ -50,7 +70,9 @@
   (filter #(= :shot (%1 :type)) (vals entities)))
 
 (defn get-players-and-walls [entities]
-  (remove #(= :shot (%1 :type)) (vals entities)))
+  (remove #(or
+            (= :shrapnel (%1 :type))
+            (= :shot (%1 :type))) (vals entities)))
 
 (defn within? [p q]
   (let [[px1 py1] (p :position)
@@ -83,18 +105,21 @@
           :health 10
           :position [(rand-int 400) (rand-int 400)]})))
 
+(defn add-ai [id]
+  (swap! ai-agents conj {:player-id id}))
 
 ;; todo finish
 (defn add-player []
   (let [player (get-player [500 500] "#622")
         id (player :id)]
+    (add-ai id)
     (swap! entities assoc id player)))
 
 
 (defonce player-key-map {:space {:type :shoot} 
                          :b {:type :player-bomb} 
-                         :w {:type :player-move :player-move 1.1} 
-                         :s {:type :player-move :player-move -1.1} 
+                         :w {:type :player-move :player-move 1} 
+                         :s {:type :player-move :player-move -1} 
                          :a {:type :player-turn :player-turn -0.1} 
                          :d {:type :player-turn :player-turn 0.1}})
 
@@ -108,7 +133,18 @@
 
 (defmulti draw-entity :type)
 
-(defmethod draw-entity :shrapnel [p])
+(defmethod draw-entity :shrapnel [p]
+  (let [ctx (get-ctx)
+        position (p :position)
+        [x y] position
+        w (p :w)
+        h (p :h)]
+    (.save ctx)
+    (set! (.-fillStyle ctx) (p :color))
+    (.beginPath ctx)
+    (.arc ctx x y 2 6 0 (* 2 Math/PI))
+    (.fill ctx)
+    (.restore ctx)))
 
 (defmethod draw-entity :player [p]
   (let [ctx (get-ctx)
@@ -155,7 +191,7 @@
   (and (>= x -10) (< x WIDTH) (>= y -10) (< y HEIGHT)))
 
 (defn can-shoot? [p t]
-  (> (- t (p :last-shot)) 750))
+  (> (- t (p :last-shot)) (p :time-between-shots)))
 
 (defn find-first [pred coll]
   (first (filter pred coll)))
@@ -195,6 +231,17 @@
           y (+ y (* (sin (shot :angle)) move ))]
           (swap! entities assoc-in [(e :id) :position] [x y w h])))
 
+(defmethod do-event :shrapnel-move [e]
+    (let [move (e :speed)
+          shrapnel (@entities (e :id))
+          position (shrapnel :position)
+          [x y] position
+          x (+ x (* (cos (shrapnel :angle)) move ))
+          y (+ y (* (sin (shrapnel :angle)) move ))]
+          (if-not (e :expire)
+            (swap! entities assoc-in [(e :id) :position] [x y])
+            (swap! entities dissoc (e :id)))))
+
 (defmethod do-event :player-turn [e]
   (let [player (e :player)
         pid (player :id)
@@ -212,10 +259,12 @@
       {:type :death :entity (@entities id)}
       nil)))
 
-;; TODO: better death handling
 (defmethod do-event :death [e]
-  (swap! entities dissoc (get-in e [:entity :id]))
-  (prn e))
+  (let [id (get-in e [:entity :id])
+        position (get-in e [:entity :position])]
+    (dotimes [n 30] (let [s (get-shrapnel position "#c55" (+ 1 (/ (rand 100) 100)) n)]
+        (swap! entities assoc (s :id) s)))
+  (swap! entities dissoc id)))
 
 (defmethod do-event :hit [e]
   (let [{shot-id :shot-id
@@ -237,7 +286,7 @@
 (defmethod do-event :player-move [e]
   (let [p (e :player)
         old-position (p :position) 
-        move (e :player-move)
+        move (* (p :speed) (e :player-move))
         x (* (cos (p :angle)) move )
         y (* (sin (p :angle)) move )
         arr [[x y] old-position]
@@ -272,8 +321,13 @@
 ; these are events that just happen 
 (defn get-world-events [timestamp] 
   (map (fn [ent]
-         ({:shot {:type :shot-move :shot-move 3
+         ({:shot {:type :shot-move
+                  :shot-move 3
                   :id (ent :id)}
+           :shrapnel {:type :shrapnel-move
+                      :speed (ent :speed)
+                      :expire (< (ent :expire-length) (- timestamp (ent :time-in)))
+                      :id (ent :id)}
            ; :ant {:ant-move 3
            ; :id (ent :id)}
    } (ent :type))) (vals @entities)))
@@ -282,7 +336,6 @@
   (if (empty? events) nil
       (handle-events
        (keep do-event events))))
-
     
 ;; lame hit-detection
 (defn detect-hits []
@@ -302,6 +355,18 @@
     (apply (partial swap! entities dissoc)
            (map :id oob))))        
 
+;; TODO: add can shoot
+;; damage player
+;;    normal weapon
+;;       player moving
+;;       player still
+;; avoid
+;;     
+;; idle
+;;   drive around
+(defn handle-ai []
+  (doseq [ai @ai-agents]
+    ))
 
 (defn update-world [keypresses timestamp]
   (let [press-list (seq
@@ -317,13 +382,15 @@
     (do 
         (handle-events player-events)
         (handle-events world-events)
-        (handle-events (detect-hits)) ; (get-shots @entities) (get-entities @entities))
+        (handle-events (detect-hits)) 
+        (handle-events (handle-ai))
         (detect-shot-oob (get-shots @entities)))))
 
 (defn start []
    ;(.setInterval js/window add-ant 8000)
    (println "start called")
    ((fn render-loop [timestamp]
+       (swap! time-now #(do timestamp))
        (update-world @keypresses timestamp)
        (draw-world)
        (.requestAnimationFrame js/window render-loop))))
