@@ -4,6 +4,7 @@
   :dependencies [
     [org.clojure/clojure "1.8.0"]
     [reagent "0.6.0-alpha"]
+    [cljs-hash "0.0.2"]
     [org.clojure/clojurescript "1.7.228"]]
   :cljsbuild {
     :builds [{

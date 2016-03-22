@@ -1,6 +1,7 @@
 (ns tanks.core
   (:require
     [reagent.core :as r]
+    [cljs-hash.sha1 :refer [sha1]]
     [tanks.utils :refer [log]]))
 
 (enable-console-print!)
@@ -47,6 +48,7 @@
            :angle 0
            :time-between-shots 850
            :last-shot 0
+           :transforms []
            :bombs 1}]
     p))
 
@@ -64,7 +66,8 @@
                       :w 10
                       :h 10
                       :health 10
-                      :position [400, 400]}}))
+                      :transforms []
+                      :position [250, 400]}}))
 
 (defn get-shots [entities]
   (filter #(= :shot (%1 :type)) (vals entities)))
@@ -103,6 +106,7 @@
           :w 10
           :h 10
           :health 10
+          :transforms []
           :position [(rand-int 400) (rand-int 400)]})))
 
 (defn add-ai [id]
@@ -132,6 +136,8 @@
   ctx))
 
 (defmulti draw-entity :type)
+
+(defmethod draw-entity :default [e] (prn e))
 
 (defmethod draw-entity :shrapnel [p]
   (let [ctx (get-ctx)
@@ -171,7 +177,10 @@
 
 (defmethod draw-entity :ant [p]
   (let [ctx (get-ctx) position (p :position)]
-    (.fillRect ctx (first position) (last position) (p :w) (p :h))))
+    (.save ctx)
+    (if (p :color) (set! (.-fillStyle ctx) (p :color)))
+    (.fillRect ctx (first position) (last position) (p :w) (p :h))
+    (.restore ctx)))
 
 (defmethod draw-entity :wall [p])
 
@@ -259,11 +268,14 @@
       {:type :death :entity (@entities id)}
       nil)))
 
+(defn explosion-at [p]
+  (dotimes [n 35] (let [s (get-shrapnel p "#c55" (+ 1 (/ (rand 100) 40)) n)]
+        (swap! entities assoc (s :id) s))))
+
 (defmethod do-event :death [e]
   (let [id (get-in e [:entity :id])
         position (get-in e [:entity :position])]
-    (dotimes [n 30] (let [s (get-shrapnel position "#c55" (+ 1 (/ (rand 100) 100)) n)]
-        (swap! entities assoc (s :id) s)))
+  (explosion-at position)  
   (swap! entities dissoc id)))
 
 (defmethod do-event :hit [e]
@@ -272,6 +284,10 @@
          hit-entity :to} e]
     (swap! entities update-in
            [from-player-id :score] (partial + 5))
+    (swap! entities update-in [(:id hit-entity) :transforms] conj {:started (e :timestamp)
+                                                                   :property :color
+                                                                   :type :random
+                                                                   :duration 600})
     (swap! entities dissoc shot-id)
     {:type :damage :val 5 :entity hit-entity}))
 
@@ -312,10 +328,10 @@
           :position [(+ 7 x) (+ 7 y)]}))
       (swap! entities assoc-in [id :last-shot] t))))
 
-(defn draw-world []
+(defn draw-world [entities]
   (let [ctx (get-ctx)]
     (.clearRect ctx 0 0 800 600)
-      (doseq [x (vals @entities)]
+      (doseq [x entities]
           (do (draw-entity x)))))
 
 ; these are events that just happen 
@@ -338,13 +354,14 @@
        (keep do-event events))))
     
 ;; lame hit-detection
-(defn detect-hits []
+(defn detect-hits [timestamp]
   (mapcat (fn [s]
             (keep #(if (do (and (not= (%1 :id) (get-in s [:from-player]))
                             (within? s %1)))
                      {:type :hit
                       :shot-id (s :id)
                       :from-player (s :from-player)
+                      :timestamp timestamp
                       :to %1}
                     nil)
                  (get-players-and-walls @entities))
@@ -354,6 +371,7 @@
   (let [oob (filter #(oob? (%1 :position)) shots)]
     (apply (partial swap! entities dissoc)
            (map :id oob))))        
+
 
 ;; TODO: add can shoot
 ;; damage player
@@ -365,7 +383,8 @@
 ;; idle
 ;;   drive around
 (defn handle-ai []
-  (doseq [ai @ai-agents]
+  (doseq [ai @ai-agents
+          ]
     ))
 
 (defn update-world [keypresses timestamp]
@@ -382,17 +401,42 @@
     (do 
         (handle-events player-events)
         (handle-events world-events)
-        (handle-events (detect-hits)) 
+        (handle-events (detect-hits timestamp)) 
         (handle-events (handle-ai))
         (detect-shot-oob (get-shots @entities)))))
 
+(defn random-color [timestamp c]
+  (apply str (cons "#"
+        (subs (sha1 (str (quot timestamp 90))) 0 3))))
+
+;; TODO make generic with multimethod
+(defn do-entity-transform [entities timestamp]
+  ;{:started (e :timestamp) :property :color :type :random-color :duration 1000}
+  (map (fn [e]
+           (cond (not-empty (:transforms e))
+                 ;; transform entity  
+                 (reduce #(update-in %1 [(:property %2)]
+                                     (partial random-color timestamp))
+                         e (:transforms e))
+                 :else e)) (vals entities)))
+
+
+;; TODO: should this just be animations?
+(defn expire-transforms [timestamp]
+   (doseq [[id entity] (seq @entities)]
+       (if-not (empty? (entity :transforms))
+         ;(prn id (entity :transforms))
+         (swap! entities update-in [id :transforms]
+                (partial remove #(> (- timestamp (%1 :started)) (%1 :duration)))))))
+    
 (defn start []
    ;(.setInterval js/window add-ant 8000)
    (println "start called")
    ((fn render-loop [timestamp]
        (swap! time-now #(do timestamp))
        (update-world @keypresses timestamp)
-       (draw-world)
+       (expire-transforms timestamp)
+       (draw-world (do-entity-transform @entities timestamp))
        (.requestAnimationFrame js/window render-loop))))
 
 (defonce main
