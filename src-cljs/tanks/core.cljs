@@ -91,11 +91,15 @@
          (< py1 qy2)
          (> py2 qy1))))
  
-(defonce key-map { 87 :w 
-                   83 :s 
-                   65 :a 
-                   68 :d 
-                   32 :space})
+(defonce key-map {87 :w 
+                  83 :s 
+                  65 :a 
+                  68 :d 
+                  38 :w
+                  37 :a
+                  39 :d
+                  40 :s
+                  32 :space})
 
 (defn add-ant []
   (let [id (get-id)]
@@ -110,7 +114,8 @@
           :position [(rand-int 400) (rand-int 400)]})))
 
 (defn add-ai [id]
-  (swap! ai-agents conj {:player-id id}))
+  (swap! ai-agents conj {:id (get-id)
+                         :player-last-move []}))
 
 ;; todo finish
 (defn add-player []
@@ -287,11 +292,11 @@
     (swap! entities update-in [(:id hit-entity) :transforms] conj {:started (e :timestamp)
                                                                    :property :color
                                                                    :type :random
-                                                                   :duration 600})
+                                                                   :duration 300})
     (swap! entities dissoc shot-id)
     {:type :damage :val 5 :entity hit-entity}))
 
-;; oob, other player hit
+;; check for legal moves like not oob, or other player hit
 (defn legal? [player new-position]
   (let [p (assoc player :position new-position)
         pid (player :id)
@@ -382,9 +387,9 @@
 ;;     
 ;; idle
 ;;   drive around
-(defn handle-ai []
-  (doseq [ai @ai-agents
-          ]
+(defn handle-ai [timestamp]
+  (doseq [ai @ai-agents]
+    (prn ai)
     ))
 
 (defn update-world [keypresses timestamp]
@@ -402,7 +407,7 @@
         (handle-events player-events)
         (handle-events world-events)
         (handle-events (detect-hits timestamp)) 
-        (handle-events (handle-ai))
+        (handle-events (handle-ai timestamp))
         (detect-shot-oob (get-shots @entities)))))
 
 (defn random-color [timestamp c]
@@ -425,7 +430,6 @@
 (defn expire-transforms [timestamp]
    (doseq [[id entity] (seq @entities)]
        (if-not (empty? (entity :transforms))
-         ;(prn id (entity :transforms))
          (swap! entities update-in [id :transforms]
                 (partial remove #(> (- timestamp (%1 :started)) (%1 :duration)))))))
     
@@ -433,10 +437,11 @@
    ;(.setInterval js/window add-ant 8000)
    (println "start called")
    ((fn render-loop [timestamp]
-       (swap! time-now #(do timestamp))
-       (update-world @keypresses timestamp)
-       (expire-transforms timestamp)
-       (draw-world (do-entity-transform @entities timestamp))
+      (swap! time-now #(do timestamp))
+      (update-world @keypresses timestamp)
+      (expire-transforms timestamp)
+      (draw-world
+       (do-entity-transform @entities timestamp))
        (.requestAnimationFrame js/window render-loop))))
 
 (defonce main
