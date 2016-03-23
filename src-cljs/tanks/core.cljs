@@ -26,6 +26,9 @@
 
 (defonce playing (r/atom false))
 
+; TODO: finish
+(defn set-player-1 [])
+
 (defn get-shrapnel
   "position color speed and angle"
   [p c s a duration]
@@ -223,11 +226,34 @@
     (when (< (dist [x y] [px py]) 15)
       (sapper-explosion-at [x y])
       (swap! entities dissoc id)
-      {:type :splash-damage :position [x y]}
+      {:type :splash-damage
+       :timestamp (e :timestamp)
+       :r 30
+       :val 30
+       :position [x y]}
     )))
 
 (defmethod do-event :splash-damage [e]
-  (prn e))
+  (let [{timestamp :timestamp
+         val :val
+         r :r
+         p :position} e
+        pid (player :id)
+        player (@entities pid)
+        d (max 1 (dist (player :position) p))] 
+
+    (swap! entities
+           update-in
+           [pid :transforms]
+           conj {:started timestamp
+                 :property :color
+                 :type :random
+                 :duration 300})
+
+    {:type :damage
+     :timestamp timestamp
+     :val (/ val d)
+     :entity (@entities pid)}))
 
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
@@ -265,8 +291,8 @@
     (swap! entities update-in [id :health] #(- %1 val))
     (if (<= (get-in @entities [id :health]) 0)
       (do 
-        (swap! entities update-in
-               [from-player-id :score] (partial + score))
+        (if from-player-id (swap! entities update-in
+               [from-player-id :score] (partial + score)))
         {:type :death :entity (@entities id)})
       nil))) 
 
@@ -341,15 +367,18 @@
 (defn get-world-events [timestamp] 
   (keep (fn [ent]
          ({:shot {:type :shot-move
+                  :timestamp timestamp
                   :shot-move 3
                   :id (ent :id)}
            :shrapnel {:type :shrapnel-move
+                      :timestamp timestamp
                       :speed (ent :speed)
                       :expire (< (ent :expire-length) (- timestamp (ent :time-in)))
                       :id (ent :id)}
            :sapper {:speed 0.5
-                   :type :sapper-move
-                   :id (ent :id)}
+                    :timestamp timestamp
+                    :type :sapper-move
+                    :id (ent :id)}
    } (ent :type))) (vals @entities)))
 
 (defn handle-events [events] 
