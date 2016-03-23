@@ -168,6 +168,40 @@
         (< x 0)
         (< y 0))))
 
+(defn dist [p1 p2]
+  (let [[x1 y1] p1
+        [x2 y2] p2]
+    (Math/sqrt (+ (exp (- x2 x1) 2) (exp (- y2 y1) 2)))))
+
+(defn angle-at [p1 p2]
+  (let [[x1 y1] p1
+        [x2 y2] p2
+        dx (- x2 x1)
+        dy (- y2 y1)]
+    (- (Math/atan2 dy dx) Math/PI)))
+
+(defn explosion-at
+  "Creates an explosion at a point"
+  [p]
+  (dotimes [n 35] (let [s (get-shrapnel p "#c55"
+                                        (+ 1 (/ (rand 100) 40))
+                                        n
+                                        (rand-int 2000))]
+        (swap! entities assoc (s :id) s))))
+
+(defn ring-explosion-at
+  "Creates an explosion at a point"
+  [start p]
+  (doseq [n (range (+ start 0) (+ start 360) 30)]
+    (let [angle (* n (/ Math/PI 180))
+          s (get-shrapnel p "#dd5" 1.7 angle (rand-int 230))]
+      (swap! entities assoc (s :id) s))))
+
+(defn sapper-explosion-at
+  [p]
+  (doseq [n (range 0 400 100)]
+    (.setTimeout js/window #(ring-explosion-at (/ n 20) p) n)))
+ 
 (defmulti do-event (fn [e]
                      (:type e)))
 
@@ -185,7 +219,15 @@
         position (sapper :position)
         x (+ (first position) (* (Math/cos angle) (sapper :speed)))
         y (+ (second position) (* (Math/sin angle) (sapper :speed)))]
-    (swap! entities assoc-in [id :position] [x y])))
+    (swap! entities assoc-in [id :position] [x y])
+    (when (< (dist [x y] [px py]) 15)
+      (sapper-explosion-at [x y])
+      (swap! entities dissoc id)
+      {:type :splash-damage :position [x y]}
+    )))
+
+(defmethod do-event :splash-damage [e]
+  (prn e))
 
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
@@ -226,30 +268,7 @@
         (swap! entities update-in
                [from-player-id :score] (partial + score))
         {:type :death :entity (@entities id)})
-      nil)))
-
-(defn explosion-at
-  "Creates an explosion at a point"
-  [p]
-  (dotimes [n 35] (let [s (get-shrapnel p "#c55"
-                                        (+ 1 (/ (rand 100) 40))
-                                        n
-                                        (rand-int 2000))]
-        (swap! entities assoc (s :id) s))))
-
-(defn ring-explosion-at
-  "Creates an explosion at a point"
-  [start p]
-  (doseq [n (range (+ start 0) (+ start 360) 30)]
-    (let [angle (* n (/ Math/PI 180))
-          s (get-shrapnel p "#dd5" 1.7 angle (rand-int 230))]
-      (swap! entities assoc (s :id) s))))
-
-(defn sapper-explosion-at
-  [p]
-  (doseq [n (range 0 400 100)]
-    (.setTimeout js/window #(ring-explosion-at (/ n 20) p) n)))
-  
+      nil))) 
 
 (defmethod do-event :death [e]
   (let [id (get-in e [:entity :id])
@@ -356,18 +375,6 @@
   (let [oob (filter #(oob? (%1 :position)) shots)]
     (apply (partial swap! entities dissoc)
            (map :id oob))))        
-
-(defn dist [p1 p2]
-  (let [[x1 y1] p1
-        [x2 y2] p2]
-    (Math/sqrt (+ (exp (- x2 x1) 2) (exp (- y2 y1) 2)))))
-
-(defn angle-at [p1 p2]
-  (let [[x1 y1] p1
-        [x2 y2] p2
-        dx (- x2 x1)
-        dy (- y2 y1)]
-    (- (Math/atan2 dy dx) Math/PI)))
 
 ;; damage player
 ;;    normal weapon
