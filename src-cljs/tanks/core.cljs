@@ -162,19 +162,19 @@
 
 (defmethod do-event :default [x])
 
-;; (defmethod do-event :ant-move [e]
-;;   (let [id (e :id) 
-;;         ant (@entities id) 
-;;         old-y (get-in ant [:position 1])
-;;         old-x (get-in ant [:position 0])
-;;         [px py] (get-in @entities [(player :id) :position])
-;;         deltaY (- old-y py)
-;;         deltaX (- old-x px)
-;;         angle (* (/ 180 Math/PI) (Math/atan (/ deltaY deltaX)))
-;;         position (ant :position)
-;;         x (+ (first position) (* (Math/cos angle) 1 ))
-;;         y (+ (second position) (* (Math/sin angle) 1 ))]
-;;     (swap! entities assoc-in [id :position] [x y])))
+(defmethod do-event :ant-move [e]
+  (let [id (e :id) 
+        ant (@entities id) 
+        old-y (get-in ant [:position 1])
+        old-x (get-in ant [:position 0])
+        [px py] (get-in @entities [(player :id) :position])
+        deltaY (- old-y py)
+        deltaX (- old-x px)
+        angle (* (/ 180 Math/PI) (Math/atan (/ deltaY deltaX)))
+        position (ant :position)
+        x (+ (first position) (* (Math/cos angle) 1 ))
+        y (+ (second position) (* (Math/sin angle) 1 ))]
+    (swap! entities assoc-in [id :position] [x y])))
 
 (defmethod do-event :shot-move [e]
     (let [move (e :shot-move)
@@ -205,10 +205,16 @@
 
 (defmethod do-event :damage [e]
   (let [id (get-in e [:entity :id])
-        val (e :val)]
+        val (e :val)
+        from-player-id (e :from-player-id)
+        type (get-in @entities [id :type])
+        score ({:ant 10 :player 20} type)]
     (swap! entities update-in [id :health] #(- %1 val))
     (if (<= (get-in @entities [id :health]) 0)
-      {:type :death :entity (@entities id)}
+      (do 
+        (swap! entities update-in
+               [from-player-id :score] (partial + score))
+        {:type :death :entity (@entities id)})
       nil)))
 
 (defn explosion-at
@@ -234,14 +240,15 @@
   (let [{shot-id :shot-id
          from-player-id :from-player
          hit-entity :to} e]
-    (swap! entities update-in
-           [from-player-id :score] (partial + 5))
-    (swap! entities update-in [(:id hit-entity) :transforms] conj {:started (e :timestamp)
-                                                                   :property :color
-                                                                   :type :random
-                                                                   :duration 300})
+    (swap! entities
+           update-in
+           [(:id hit-entity) :transforms]
+           conj {:started (e :timestamp)
+                 :property :color
+                 :type :random
+                 :duration 300})
     (swap! entities dissoc shot-id)
-    {:type :damage :val 5 :entity hit-entity}))
+    {:type :damage :from-player-id from-player-id :val 5 :entity hit-entity}))
 
 ;; check for legal moves like not oob, or other player hit
 (defn legal? [player new-position]
@@ -412,16 +419,16 @@
 (defn start
   "create the render loop for the game"
   []
-   ;(.setInterval js/window add-ant 8000)
-   (println "start called")
-   ((fn render-loop [timestamp]
-      (when @playing
-        (swap! time-now #(do timestamp))
-        (update-world @keypresses timestamp)
-        (expire-transforms timestamp)
-        (render/draw-world
-           (do-entity-transform @entities timestamp))
-        (.requestAnimationFrame js/window render-loop)))))
+  (.setInterval js/window add-ant 8000)
+  (println "start called")
+  ((fn render-loop [timestamp]
+     (when @playing
+       (swap! time-now #(do timestamp))
+       (update-world @keypresses timestamp)
+       (expire-transforms timestamp)
+       (render/draw-world
+          (do-entity-transform @entities timestamp))
+       (.requestAnimationFrame js/window render-loop)))))
 
 (defn toggle-start []
   (if-not @playing
