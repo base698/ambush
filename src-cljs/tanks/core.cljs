@@ -24,7 +24,7 @@
 
 (def time-now (atom 0.0))
 
-(defonce paused false)
+(defonce playing (r/atom false))
 
 (defn get-shrapnel [p c s a]
   {:id (get-id)
@@ -66,7 +66,7 @@
                   32 :space})
 
 ;;; Crux of the data updated for the game
-(defonce player (assoc (get-player 100 [200, 200] "#072" 850) :human true))
+(defonce player (assoc (get-player 10 [200, 200] "#072" 850) :human true))
 
 (defonce keypresses (atom {}))
 
@@ -123,13 +123,15 @@
             :player-last-position (sorted-set) 
             :player-last-angle (sorted-set)}
         id (ai :id)]
-  (swap! ai-agents assoc id ai)))
+    (swap! ai-agents assoc id ai)
+    id))
 
 ;; TODO: make into level up/playing cpu
 (defn add-player []
   (let [player (get-player 30 [500 500] "#992" 3300)
-        id (player :id)]
-    (add-ai id)
+        id (player :id)
+        ai-id (add-ai id)
+        player (assoc player :ai-id ai-id)]
     (swap! entities assoc id player)))
 
 (defonce player-key-map {:space {:type :shoot} 
@@ -218,9 +220,15 @@
 (defmethod do-event :death [e]
   (let [id (get-in e [:entity :id])
         position (get-in e [:entity :position])]
-  (prn e)
   (explosion-at position)  
-  (swap! entities dissoc id)))
+  (swap! ai-agents dissoc (get-in e [:entity :id :ai-id]))
+  (swap! entities dissoc id)
+  (if (= id (player :id)) {:type :game-over})))
+
+;; TODO: game over features let explosion finish etc
+(defmethod do-event :game-over [e]
+  (prn "game-over" e)
+  (reset! playing false))
 
 (defmethod do-event :hit [e]
   (let [{shot-id :shot-id
@@ -316,14 +324,13 @@
         [x2 y2] p2]
     (Math/sqrt (+ (exp (- x2 x1) 2) (exp (- y2 y1) 2)))))
 
-(defn angle-between [p1 p2]
+(defn angle-at [p1 p2]
   (let [[x1 y1] p1
         [x2 y2] p2
         dx (- x2 x1)
         dy (- y2 y1)]
     (- (Math/atan2 dy dx) Math/PI)))
 
-;; TODO: add can shoot
 ;; damage player
 ;;    normal weapon
 ;;       player moving
@@ -336,32 +343,24 @@
 ;;  :player-id id
 ;;  :player-last-position []
 ;;  :player-last-angle []}
+;; TODO: create events processed as normal
 (defn handle-ai [timestamp]
   (let [human (@entities (player :id))
         position (human :position)
         angle (human :angle)]
-    (doseq [[id ai] (seq @ai-agents)]
-      (let [cpu-player-id (ai :player-id)
-            cpu-player (@entities cpu-player-id)
-            cpu-position (cpu-player :position)]
-         (do
-           (swap! ai-agents update-in [id :player-last-position] into [position])
-           (swap! ai-agents update-in [id :player-last-position] (partial take 200))
-           (let [between (angle-between position cpu-position)]
-             
-             ;; (swap! entities assoc-in
-             ;;        [cpu-player-id :angle]
-             ;;        between)
-
-              (do-event {:type :shoot
-                 :timestamp timestamp
-                 :player cpu-player})
-           
-           ))))))
-           ;(swap! ai-agents (comp (partial take 400)
-           ;                        update-in [id :player-last-position]) conj position)
-           ;(swap! ai-agents (comp (partial take 400)
-           ;                        update-in [id :player-last-angle]) conj angle))))))
+    (keep (fn [ai-pair]
+            (let [[id ai] ai-pair
+                  cpu-player-id (ai :player-id)
+                  cpu-player (@entities cpu-player-id)]
+             (when cpu-player
+                   ;(swap! ai-agents update-in [id :player-last-position] into [position])
+                   ;(swap! ai-agents update-in [id :player-last-position] (partial take 200))
+                   (swap! entities assoc-in
+                          [cpu-player-id :angle]
+                          (angle-at position (cpu-player :position)))
+                   {:type :shoot
+                    :timestamp timestamp
+                    :player cpu-player}))) (seq @ai-agents))))
 
 (defonce player-score (r/atom 0))
 
@@ -379,8 +378,8 @@
     (do 
         (handle-events player-events)
         (handle-events world-events)
+        (handle-events (handle-ai timestamp))
         (handle-events (detect-hits timestamp)) 
-       ; (handle-events (handle-ai timestamp))
         ;; update reagent value
         (reset! player-score (get-in @entities [(player :id) :score]))
         (detect-shot-oob (get-shots @entities)))))
@@ -392,6 +391,7 @@
 ;; TODO make generic with multimethod
 (defn do-entity-transform [entities timestamp]
   ;{:started (e :timestamp) :property :color :type :random-color :duration 1000}
+
   (map (fn [e]
            (cond (not-empty (:transforms e))
                  ;; transform entity  
@@ -415,7 +415,7 @@
    ;(.setInterval js/window add-ant 8000)
    (println "start called")
    ((fn render-loop [timestamp]
-      (when-not paused
+      (when @playing
         (swap! time-now #(do timestamp))
         (update-world @keypresses timestamp)
         (expire-transforms timestamp)
@@ -423,16 +423,23 @@
            (do-entity-transform @entities timestamp))
         (.requestAnimationFrame js/window render-loop)))))
 
-(defn blur-after-start []
-  ((comp (fn [a]
-    (.blur (.getElementById js/document "start")))
-    start)))
+(defn toggle-start []
+  (if-not @playing
+    (do
+        (reset! playing true)
+        ((comp (fn [a]
+                 (.blur
+                  (.getElementById
+                   js/document
+                   "start")))
+               start)))
+    (do (reset! playing false))))
 
 (defn app-ui []
   [:div#container
    [:div#title-bar
     [:h1#title "Tanks"]
-    [:button#start {:on-click blur-after-start} "New Game" ]]
+    [:button#start {:on-click toggle-start} (if-not @playing "Play" "Pause")]]
    [:canvas#screen {:width WIDTH :height HEIGHT}]
    [:span#player-name "Player 1"]
    [:span#score @player-score]])
