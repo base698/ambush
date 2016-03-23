@@ -363,6 +363,8 @@
            ;(swap! ai-agents (comp (partial take 400)
            ;                        update-in [id :player-last-angle]) conj angle))))))
 
+(defonce player-score (r/atom 0))
+
 (defn update-world [keypresses timestamp]
   (let [press-list (seq
                     (select-keys
@@ -379,6 +381,8 @@
         (handle-events world-events)
         (handle-events (detect-hits timestamp)) 
        ; (handle-events (handle-ai timestamp))
+        ;; update reagent value
+        (reset! player-score (get-in @entities [(player :id) :score]))
         (detect-shot-oob (get-shots @entities)))))
 
 (defn random-color [timestamp c]
@@ -404,7 +408,10 @@
          (swap! entities update-in [id :transforms]
                 (partial remove #(> (- timestamp (%1 :started)) (%1 :duration)))))))
     
-(defn start []
+
+(defn start
+  "create the render loop for the game"
+  []
    ;(.setInterval js/window add-ant 8000)
    (println "start called")
    ((fn render-loop [timestamp]
@@ -416,12 +423,24 @@
            (do-entity-transform @entities timestamp))
         (.requestAnimationFrame js/window render-loop)))))
 
+(defn blur-after-start []
+  ((comp (fn [a]
+    (.blur (.getElementById js/document "start")))
+    start)))
+
+(defn app-ui []
+  [:div#container
+   [:div#title-bar
+    [:h1#title "Tanks"]
+    [:button#start {:on-click blur-after-start} "New Game" ]]
+   [:canvas#screen {:width WIDTH :height HEIGHT}]
+   [:span#player-name "Player 1"]
+   [:span#score @player-score]])
+
 (defonce main
   (do
-    (.addEventListener (.getElementById js/document "start")
-                       "click" (comp (fn [a]
-                                       (.blur (.getElementById js/document "start")))
-                                     start) )
+    (r/render-component [app-ui]
+                        (js/document.getElementById "main"))
     (.addEventListener js/window "keydown"
        #(do (swap! keypresses
                assoc
