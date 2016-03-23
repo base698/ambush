@@ -26,11 +26,13 @@
 
 (defonce playing (r/atom false))
 
-(defn get-shrapnel [p c s a]
+(defn get-shrapnel
+  "position color speed and angle"
+  [p c s a duration]
   {:id (get-id)
    :type :shrapnel
    :time-in @time-now
-   :expire-length (rand-int 2000)
+   :expire-length duration
    :w 3
    :h 3
    :speed s
@@ -51,6 +53,8 @@
            :angle 0
            :time-between-shots t
            :last-shot 0
+           :hits 0
+           :shots 0
            :transforms []
            :bombs 1}]
     p))
@@ -73,15 +77,15 @@
 (defonce ai-agents (atom {}))
 
 (defonce entities (atom {(player :id)
-                          player
-                         first-id
-                          {:id first-id
-                           :type :ant
-                           :w 10
-                           :h 10
-                           :health 10
-                           :transforms []
-                           :position [250, 400]}}))
+                          player}))
+
+(defonce level (atom 1))
+
+(defonce sapper-rate (atom 6000))
+
+(defonce speed-rate (atom 6000))
+
+(defonce level-increase-rate 1.2)
 
 (defn get-shots [entities]
   (filter #(= :shot (%1 :type)) (vals entities)))
@@ -105,17 +109,24 @@
          (< py1 qy2)
          (> py2 qy1))))
  
-(defn add-ant []
+(defn intro-enemy-position []
+  (nth [[-5 (rand-int HEIGHT)]
+        [(rand-int WIDTH) -5]
+        [(+ 5 WIDTH) (rand-int HEIGHT)]
+        [(rand-int WIDTH) (+ 5 HEIGHT)]] (rand-int 4)))
+
+(defn add-sapper [s]
   (let [id (get-id)]
     (swap! entities 
       assoc 
       id {:id id
-          :type :ant
+          :type :sapper
           :w 10
           :h 10
+          :speed s
           :health 10
           :transforms []
-          :position [(rand-int 400) (rand-int 400)]})))
+          :position (intro-enemy-position)})))
 
 (defn add-ai [id]
   (let [ai {:id (get-id)
@@ -162,18 +173,18 @@
 
 (defmethod do-event :default [x])
 
-(defmethod do-event :ant-move [e]
+(defmethod do-event :sapper-move [e]
   (let [id (e :id) 
-        ant (@entities id) 
-        old-y (get-in ant [:position 1])
-        old-x (get-in ant [:position 0])
+        sapper (@entities id) 
+        old-y (get-in sapper [:position 1])
+        old-x (get-in sapper [:position 0])
         [px py] (get-in @entities [(player :id) :position])
         deltaY (- old-y py)
         deltaX (- old-x px)
         angle (* (/ 180 Math/PI) (Math/atan (/ deltaY deltaX)))
-        position (ant :position)
-        x (+ (first position) (* (Math/cos angle) 1 ))
-        y (+ (second position) (* (Math/sin angle) 1 ))]
+        position (sapper :position)
+        x (+ (first position) (* (Math/cos angle) (sapper :speed)))
+        y (+ (second position) (* (Math/sin angle) (sapper :speed)))]
     (swap! entities assoc-in [id :position] [x y])))
 
 (defmethod do-event :shot-move [e]
@@ -208,7 +219,7 @@
         val (e :val)
         from-player-id (e :from-player-id)
         type (get-in @entities [id :type])
-        score ({:ant 10 :player 20} type)]
+        score ({:sapper 10 :player 20} type)]
     (swap! entities update-in [id :health] #(- %1 val))
     (if (<= (get-in @entities [id :health]) 0)
       (do 
@@ -220,8 +231,25 @@
 (defn explosion-at
   "Creates an explosion at a point"
   [p]
-  (dotimes [n 35] (let [s (get-shrapnel p "#c55" (+ 1 (/ (rand 100) 40)) n)]
+  (dotimes [n 35] (let [s (get-shrapnel p "#c55"
+                                        (+ 1 (/ (rand 100) 40))
+                                        n
+                                        (rand-int 2000))]
         (swap! entities assoc (s :id) s))))
+
+(defn ring-explosion-at
+  "Creates an explosion at a point"
+  [start p]
+  (doseq [n (range (+ start 0) (+ start 360) 30)]
+    (let [angle (* n (/ Math/PI 180))
+          s (get-shrapnel p "#dd5" 1.7 angle (rand-int 230))]
+      (swap! entities assoc (s :id) s))))
+
+(defn sapper-explosion-at
+  [p]
+  (doseq [n (range 0 400 100)]
+    (.setTimeout js/window #(ring-explosion-at (/ n 20) p) n)))
+  
 
 (defmethod do-event :death [e]
   (let [id (get-in e [:entity :id])
@@ -240,6 +268,7 @@
   (let [{shot-id :shot-id
          from-player-id :from-player
          hit-entity :to} e]
+    ;; TODO: move out to own function for reuse elsewhere
     (swap! entities
            update-in
            [(:id hit-entity) :transforms]
@@ -247,6 +276,7 @@
                  :property :color
                  :type :random
                  :duration 300})
+    (swap! entities update-in [from-player-id :hits] inc)
     (swap! entities dissoc shot-id)
     {:type :damage :from-player-id from-player-id :val 5 :entity hit-entity}))
 
@@ -275,6 +305,7 @@
         x (get-in player [:position 0])
         y (get-in player [:position 1])]
     (when (can-shoot? player t) 
+      (swap! entities update-in [id :shots] inc)
       (let [id (get-id)]
         (swap! entities assoc id {
           :id id 
@@ -297,8 +328,8 @@
                       :speed (ent :speed)
                       :expire (< (ent :expire-length) (- timestamp (ent :time-in)))
                       :id (ent :id)}
-           :ant {:speed 0.5
-                   :type :ant-move
+           :sapper {:speed 0.5
+                   :type :sapper-move
                    :id (ent :id)}
    } (ent :type))) (vals @entities)))
 
@@ -398,7 +429,6 @@
 ;; TODO make generic with multimethod
 (defn do-entity-transform [entities timestamp]
   ;{:started (e :timestamp) :property :color :type :random-color :duration 1000}
-
   (map (fn [e]
            (cond (not-empty (:transforms e))
                  ;; transform entity  
@@ -419,7 +449,7 @@
 (defn start
   "create the render loop for the game"
   []
-  (.setInterval js/window add-ant 8000)
+  ;(.setInterval js/window (partial add-sapper speed-rate) 8000)
   (println "start called")
   ((fn render-loop [timestamp]
      (when @playing
@@ -430,17 +460,19 @@
           (do-entity-transform @entities timestamp))
        (.requestAnimationFrame js/window render-loop)))))
 
+(defn blur-focus [& a]
+  (.blur
+    (.getElementById
+    js/document
+    "start")))
+
 (defn toggle-start []
   (if-not @playing
     (do
         (reset! playing true)
-        ((comp (fn [a]
-                 (.blur
-                  (.getElementById
-                   js/document
-                   "start")))
+        ((comp blur-focus 
                start)))
-    (do (reset! playing false))))
+    (do (reset! playing false) (blur-focus))))
 
 (defn app-ui []
   [:div#container
