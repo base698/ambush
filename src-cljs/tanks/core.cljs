@@ -14,7 +14,7 @@
   :height HEIGHT
 })
 
-(def entity-id 1)
+(defonce entity-id 1)
 
 (defn get-id []
   (set! entity-id (inc entity-id)) entity-id)
@@ -53,7 +53,7 @@
     p))
 
 
-(def player (assoc (get-player 100 [200, 200] "#072" 850) :human true))
+(defonce player (assoc (get-player 100 [200, 200] "#072" 850) :human true))
 
 (defonce keypresses (atom {}))
 
@@ -129,7 +129,6 @@
     (add-ai id)
     (swap! entities assoc id player)))
 
-
 (defonce player-key-map {:space {:type :shoot} 
                          :b {:type :player-bomb} 
                          :w {:type :player-move :player-move 1} 
@@ -144,6 +143,7 @@
   (let [canvas (.getElementById js/document "screen")
         ctx (.getContext canvas "2d")]
   ctx))
+
 
 (defmulti draw-entity :type)
 
