@@ -2,6 +2,7 @@
   (:require
     [reagent.core :as r]
     [cljs-hash.sha1 :refer [sha1]]
+    [tanks.render :as render]
     [tanks.utils :refer [log]]))
 
 (enable-console-print!)
@@ -54,6 +55,8 @@
            :bombs 1}]
     p))
 
+
+;;; Crux of the data updated for the world
 
 (defonce player (assoc (get-player 100 [200, 200] "#072" 850) :human true))
 
@@ -124,7 +127,7 @@
         id (ai :id)]
   (swap! ai-agents assoc id ai)))
 
-;; todo finish
+;; TODO: make into level up/playing cpu
 (defn add-player []
   (let [player (get-player 30 [500 500] "#992" 3300)
         id (player :id)]
@@ -140,61 +143,6 @@
 
 (defn ease-in-quad [x t b c d]
     (+ (* c (/ t d) (/ t d)) b))
-
-(defn get-ctx [] 
-  (let [canvas (.getElementById js/document "screen")
-        ctx (.getContext canvas "2d")]
-  ctx))
-
-
-(defmulti draw-entity :type)
-
-(defmethod draw-entity :default [e] (prn e))
-
-(defmethod draw-entity :shrapnel [p]
-  (let [ctx (get-ctx)
-        position (p :position)
-        [x y] position
-        w (p :w)
-        h (p :h)]
-    (.save ctx)
-    (set! (.-fillStyle ctx) (p :color))
-    (.beginPath ctx)
-    (.arc ctx x y 2 6 0 (* 2 Math/PI))
-    (.fill ctx)
-    (.restore ctx)))
-
-(defmethod draw-entity :player [p]
-  (let [ctx (get-ctx)
-        position (p :position)
-        x (first position)
-        y (second position)
-        w (p :w)
-        h (p :h)]
-    (.save ctx)
-    (set! (.-fillStyle ctx) (p :color))
-    (.translate ctx (+ x  (/ w 2)) (+ y (/ h 2)))
-    (.rotate ctx (p :angle))
-    (.fillRect ctx -10 -10 w h)
-    (.fillRect ctx 8 -2 5 5)
-    (.restore ctx)))
-
-(defmethod draw-entity :shot [e]
-  (let [ctx (get-ctx)
-        position (e :position)
-        [x y] position
-        w (e :w)
-        h (e :h)]
-    (.fillRect ctx x y w h)))
-
-(defmethod draw-entity :ant [p]
-  (let [ctx (get-ctx) position (p :position)]
-    (.save ctx)
-    (if (p :color) (set! (.-fillStyle ctx) (p :color)))
-    (.fillRect ctx (first position) (last position) (p :w) (p :h))
-    (.restore ctx)))
-
-(defmethod draw-entity :wall [p])
 
 (defn player-field! [field value]
   (swap! player assoc field value))
@@ -341,11 +289,6 @@
           :position [(+ 7 x) (+ 7 y)]}))
       (swap! entities assoc-in [id :last-shot] t))))
 
-(defn draw-world [entities]
-  (let [ctx (get-ctx)]
-    (.clearRect ctx 0 0 800 600)
-      (doseq [x entities]
-          (do (draw-entity x)))))
 
 ; these are events that just happen 
 (defn get-world-events [timestamp] 
@@ -488,8 +431,8 @@
         (swap! time-now #(do timestamp))
         (update-world @keypresses timestamp)
         (expire-transforms timestamp)
-        (draw-world
-        (do-entity-transform @entities timestamp))
+        (render/draw-world
+           (do-entity-transform @entities timestamp))
         (.requestAnimationFrame js/window render-loop)))))
 
 (defonce main
