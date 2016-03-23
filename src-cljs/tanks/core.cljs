@@ -209,7 +209,9 @@
       {:type :death :entity (@entities id)}
       nil)))
 
-(defn explosion-at [p]
+(defn explosion-at
+  "Creates an explosion at a point"
+  [p]
   (dotimes [n 35] (let [s (get-shrapnel p "#c55" (+ 1 (/ (rand 100) 40)) n)]
         (swap! entities assoc (s :id) s))))
 
@@ -247,7 +249,6 @@
         move (* (p :speed) (e :player-move))
         x (* (Math/cos (p :angle)) move )
         y (* (Math/sin (p :angle)) move )
-        arr [[x y] old-position]
         new-position [(+ x (first old-position)) (+ y (second old-position))]]
     (if (legal? p new-position)
        (swap! entities assoc-in [(p :id) :position] new-position))))
@@ -310,6 +311,17 @@
     (apply (partial swap! entities dissoc)
            (map :id oob))))        
 
+(defn dist [p1 p2]
+  (let [[x1 y1] p1
+        [x2 y2] p2]
+    (Math/sqrt (+ (exp (- x2 x1) 2) (exp (- y2 y1) 2)))))
+
+(defn angle-between [p1 p2]
+  (let [[x1 y1] p1
+        [x2 y2] p2
+        dx (- x2 x1)
+        dy (- y2 y1)]
+    (- (Math/atan2 dy dx) Math/PI)))
 
 ;; TODO: add can shoot
 ;; damage player
@@ -324,18 +336,6 @@
 ;;  :player-id id
 ;;  :player-last-position []
 ;;  :player-last-angle []}
-(defn dist [p1 p2]
-  (let [[x1 y1] p1
-        [x2 y2] p2]
-    (Math/sqrt (+ (exp (- x2 x1) 2) (exp (- y2 y1) 2)))))
-
-(defn angle-between [p1 p2]
-  (let [[x1 y1] p1
-        [x2 y2] p2
-        dx (- x2 x1)
-        dy (- y2 y1)]
-    (- (Math/atan2 dy dx) Math/PI)))
-
 (defn handle-ai [timestamp]
   (let [human (@entities (player :id))
         position (human :position)
