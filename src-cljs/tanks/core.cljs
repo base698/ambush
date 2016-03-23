@@ -55,9 +55,17 @@
            :bombs 1}]
     p))
 
+(defonce key-map {87 :w 
+                  83 :s 
+                  65 :a 
+                  68 :d 
+                  38 :w
+                  37 :a
+                  39 :d
+                  40 :s
+                  32 :space})
 
-;;; Crux of the data updated for the world
-
+;;; Crux of the data updated for the game
 (defonce player (assoc (get-player 100 [200, 200] "#072" 850) :human true))
 
 (defonce keypresses (atom {}))
@@ -83,7 +91,7 @@
             (= :shrapnel (%1 :type))
             (= :shot (%1 :type))) (vals entities)))
 
-(defn overlap? [p q]
+(defn collision? [p q]
   (let [[px1 py1] (p :position)
         {pw :w ph :h} p
         px2 (+ px1 pw)
@@ -97,16 +105,6 @@
          (< py1 qy2)
          (> py2 qy1))))
  
-(defonce key-map {87 :w 
-                  83 :s 
-                  65 :a 
-                  68 :d 
-                  38 :w
-                  37 :a
-                  39 :d
-                  40 :s
-                  32 :space})
-
 (defn add-ant []
   (let [id (get-id)]
     (swap! entities 
@@ -144,26 +142,11 @@
 (defn ease-in-quad [x t b c d]
     (+ (* c (/ t d) (/ t d)) b))
 
-(defn player-field! [field value]
-  (swap! player assoc field value))
-
-(defn player-position! [pos]
-  (player-field! :position pos))
-
 (defn exp [x n]
   (reduce * (repeat n x)))
 
-(defn in-bounds? [x y] 
-  (and (>= x -10) (< x WIDTH) (>= y -10) (< y HEIGHT)))
-
 (defn can-shoot? [p t]
   (> (- t (p :last-shot)) (p :time-between-shots)))
-
-(defn find-first [pred coll]
-  (first (filter pred coll)))
-
-(defn between? [a b]
-   (and (>= a b) (<= a (+ b 5))))
 
 (defn oob? [p]
   (let [[x y] p]
@@ -218,8 +201,6 @@
     (swap! entities assoc-in [pid :angle]
            (+ angle (player :angle)))))
 
-(swap! entities assoc-in [3 :angle] 83)
-
 (defmethod do-event :damage [e]
   (let [id (get-in e [:entity :id])
         val (e :val)]
@@ -258,7 +239,7 @@
         pid (player :id)
         others (get-players-and-walls @entities)]
     (and (not (oob? new-position))
-         (not-any? #(overlap? p %1) (remove #(= (:id %1) pid) others)))))
+         (not-any? #(collision? p %1) (remove #(= (:id %1) pid) others)))))
 
 (defmethod do-event :player-move [e]
   (let [p (e :player)
@@ -314,7 +295,7 @@
 (defn detect-hits [timestamp]
   (mapcat (fn [s]
             (keep #(if (do (and (not= (%1 :id) (get-in s [:from-player]))
-                            (overlap? s %1)))
+                            (collision? s %1)))
                      {:type :hit
                       :shot-id (s :id)
                       :from-player (s :from-player)
