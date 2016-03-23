@@ -35,39 +35,40 @@
    :position p
    :color c})
 
-(defn get-player [p c]
+(defn get-player [h p c t]
   (let [p {:id (get-id)
            :type :player
            :score 0
            :color c
            :speed 0.9
-           :health 100
+           :health h
            :position p
            :w 20
            :h 20
            :angle 0
-           :time-between-shots 850
+           :time-between-shots t
            :last-shot 0
            :transforms []
            :bombs 1}]
     p))
 
 
-(def player (get-player [200, 200] "#072"))
+(def player (assoc (get-player 100 [200, 200] "#072" 850) :human true))
 
 (defonce keypresses (atom {}))
 
-(def ai-agents (atom []))
+(defonce ai-agents (atom {}))
 
-(def entities (atom {(player :id) player
-                     first-id
-                     {:id first-id
-                      :type :ant
-                      :w 10
-                      :h 10
-                      :health 10
-                      :transforms []
-                      :position [250, 400]}}))
+(defonce entities (atom {(player :id)
+                          player
+                         first-id
+                          {:id first-id
+                           :type :ant
+                           :w 10
+                           :h 10
+                           :health 10
+                           :transforms []
+                           :position [250, 400]}}))
 
 (defn get-shots [entities]
   (filter #(= :shot (%1 :type)) (vals entities)))
@@ -114,12 +115,16 @@
           :position [(rand-int 400) (rand-int 400)]})))
 
 (defn add-ai [id]
-  (swap! ai-agents conj {:id (get-id)
-                         :player-last-move []}))
+  (let [ai {:id (get-id)
+            :player-id id
+            :player-last-position (sorted-set) 
+            :player-last-angle (sorted-set)}
+        id (ai :id)]
+  (swap! ai-agents assoc id ai)))
 
 ;; todo finish
 (defn add-player []
-  (let [player (get-player [500 500] "#622")
+  (let [player (get-player 30 [500 500] "#992" 3300)
         id (player :id)]
     (add-ai id)
     (swap! entities assoc id player)))
@@ -195,10 +200,16 @@
 (defn player-position! [pos]
   (player-field! :position pos))
 
+(defn exp [x n]
+  (reduce * (repeat n x)))
 (def PI (.-PI js/Math))
 (defn sin [a] (.sin js/Math a))
+(defn sqrt [a] (.sqrt js/Math a))
+(defn asin [a] (.asin js/Math a))
+(defn acos [a] (.acos js/Math a))
 (defn atan [a] (.atan js/Math a))
-(defn atan2 [a] (.atan2 js/Math a))
+(defn abs  [a] (.abs js/Math a))
+(defn atan2 [y x] (.atan2 js/Math y x))
 (defn cos [a] (.cos js/Math a))
 
 (defn in-bounds? [x y] 
@@ -228,8 +239,11 @@
 ;; (defmethod do-event :ant-move [e]
 ;;   (let [id (e :id) 
 ;;         ant (@entities id) 
-;;         deltaY (- (get-y ant) (get-y @player))
-;;         deltaX (- (get-x ant) (get-x @player))
+;;         old-y (get-in ant [:position 1])
+;;         old-x (get-in ant [:position 0])
+;;         [px py] (get-in @entities [(player :id) :position])
+;;         deltaY (- old-y py)
+;;         deltaX (- old-x px)
 ;;         angle (* (/ 180 PI) (atan (/ deltaY deltaX)))
 ;;         position (ant :position)
 ;;         x (+ (first position) (* (cos angle) 1 ))
@@ -280,6 +294,7 @@
 (defmethod do-event :death [e]
   (let [id (get-in e [:entity :id])
         position (get-in e [:entity :position])]
+  (prn e)
   (explosion-at position)  
   (swap! entities dissoc id)))
 
@@ -341,7 +356,7 @@
 
 ; these are events that just happen 
 (defn get-world-events [timestamp] 
-  (map (fn [ent]
+  (keep (fn [ent]
          ({:shot {:type :shot-move
                   :shot-move 3
                   :id (ent :id)}
@@ -349,8 +364,9 @@
                       :speed (ent :speed)
                       :expire (< (ent :expire-length) (- timestamp (ent :time-in)))
                       :id (ent :id)}
-           ; :ant {:ant-move 3
-           ; :id (ent :id)}
+           :ant {:speed 0.5
+                   :type :ant-move
+                   :id (ent :id)}
    } (ent :type))) (vals @entities)))
 
 (defn handle-events [events] 
@@ -387,10 +403,48 @@
 ;;     
 ;; idle
 ;;   drive around
+;; {:id (get-id)
+;;  :player-id id
+;;  :player-last-position []
+;;  :player-last-angle []}
+(defn dist [p1 p2]
+  (let [[x1 y1] p1
+        [x2 y2] p2]
+    (sqrt (+ (exp (- x2 x1) 2) (exp (- y2 y1) 2)))))
+
+(defn angle-between [p1 p2]
+  (let [[x1 y1] p1
+        [x2 y2] p2
+        dx (- x2 x1)
+        dy (- y2 y1)]
+    (- (atan2 dy dx) Math/PI)))
+
 (defn handle-ai [timestamp]
-  (doseq [ai @ai-agents]
-    (prn ai)
-    ))
+  (let [human (@entities (player :id))
+        position (human :position)
+        angle (human :angle)]
+    (doseq [[id ai] (seq @ai-agents)]
+      (let [cpu-player-id (ai :player-id)
+            cpu-player (@entities cpu-player-id)
+            cpu-position (cpu-player :position)]
+         (do
+           (swap! ai-agents update-in [id :player-last-position] into [position])
+           (swap! ai-agents update-in [id :player-last-position] (partial take 200))
+           (let [between (angle-between position cpu-position)]
+             
+             ;; (swap! entities assoc-in
+             ;;        [cpu-player-id :angle]
+             ;;        between)
+
+              (do-event {:type :shoot
+                 :timestamp timestamp
+                 :player cpu-player})
+           
+           ))))))
+           ;(swap! ai-agents (comp (partial take 400)
+           ;                        update-in [id :player-last-position]) conj position)
+           ;(swap! ai-agents (comp (partial take 400)
+           ;                        update-in [id :player-last-angle]) conj angle))))))
 
 (defn update-world [keypresses timestamp]
   (let [press-list (seq
@@ -407,7 +461,7 @@
         (handle-events player-events)
         (handle-events world-events)
         (handle-events (detect-hits timestamp)) 
-        (handle-events (handle-ai timestamp))
+       ; (handle-events (handle-ai timestamp))
         (detect-shot-oob (get-shots @entities)))))
 
 (defn random-color [timestamp c]
@@ -446,7 +500,6 @@
 
 (defonce main
   (do
-    ;(.addEventListener js/window "click")
     (.addEventListener (.getElementById js/document "start")
                        "click" (comp (fn [a]
                                        (.blur (.getElementById js/document "start")))
