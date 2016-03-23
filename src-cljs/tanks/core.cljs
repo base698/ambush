@@ -23,6 +23,8 @@
 
 (def time-now (atom 0.0))
 
+(defonce paused false)
+
 (defn get-shrapnel [p c s a]
   {:id (get-id)
    :type :shrapnel
@@ -78,7 +80,7 @@
             (= :shrapnel (%1 :type))
             (= :shot (%1 :type))) (vals entities)))
 
-(defn within? [p q]
+(defn overlap? [p q]
   (let [[px1 py1] (p :position)
         {pw :w ph :h} p
         px2 (+ px1 pw)
@@ -202,15 +204,6 @@
 
 (defn exp [x n]
   (reduce * (repeat n x)))
-(def PI (.-PI js/Math))
-(defn sin [a] (.sin js/Math a))
-(defn sqrt [a] (.sqrt js/Math a))
-(defn asin [a] (.asin js/Math a))
-(defn acos [a] (.acos js/Math a))
-(defn atan [a] (.atan js/Math a))
-(defn abs  [a] (.abs js/Math a))
-(defn atan2 [y x] (.atan2 js/Math y x))
-(defn cos [a] (.cos js/Math a))
 
 (defn in-bounds? [x y] 
   (and (>= x -10) (< x WIDTH) (>= y -10) (< y HEIGHT)))
@@ -244,10 +237,10 @@
 ;;         [px py] (get-in @entities [(player :id) :position])
 ;;         deltaY (- old-y py)
 ;;         deltaX (- old-x px)
-;;         angle (* (/ 180 PI) (atan (/ deltaY deltaX)))
+;;         angle (* (/ 180 Math/PI) (Math/atan (/ deltaY deltaX)))
 ;;         position (ant :position)
-;;         x (+ (first position) (* (cos angle) 1 ))
-;;         y (+ (second position) (* (sin angle) 1 ))]
+;;         x (+ (first position) (* (Math/cos angle) 1 ))
+;;         y (+ (second position) (* (Math/sin angle) 1 ))]
 ;;     (swap! entities assoc-in [id :position] [x y])))
 
 (defmethod do-event :shot-move [e]
@@ -255,8 +248,8 @@
           shot (@entities (e :id))
           position (shot :position)
           [x y w h] position
-          x (+ x (* (cos (shot :angle)) move ))
-          y (+ y (* (sin (shot :angle)) move ))]
+          x (+ x (* (Math/cos (shot :angle)) move ))
+          y (+ y (* (Math/sin (shot :angle)) move ))]
           (swap! entities assoc-in [(e :id) :position] [x y w h])))
 
 (defmethod do-event :shrapnel-move [e]
@@ -264,8 +257,8 @@
           shrapnel (@entities (e :id))
           position (shrapnel :position)
           [x y] position
-          x (+ x (* (cos (shrapnel :angle)) move ))
-          y (+ y (* (sin (shrapnel :angle)) move ))]
+          x (+ x (* (Math/cos (shrapnel :angle)) move ))
+          y (+ y (* (Math/sin (shrapnel :angle)) move ))]
           (if-not (e :expire)
             (swap! entities assoc-in [(e :id) :position] [x y])
             (swap! entities dissoc (e :id)))))
@@ -317,14 +310,14 @@
         pid (player :id)
         others (get-players-and-walls @entities)]
     (and (not (oob? new-position))
-         (not-any? #(within? p %1) (remove #(= (:id %1) pid) others)))))
+         (not-any? #(overlap? p %1) (remove #(= (:id %1) pid) others)))))
 
 (defmethod do-event :player-move [e]
   (let [p (e :player)
         old-position (p :position) 
         move (* (p :speed) (e :player-move))
-        x (* (cos (p :angle)) move )
-        y (* (sin (p :angle)) move )
+        x (* (Math/cos (p :angle)) move )
+        y (* (Math/sin (p :angle)) move )
         arr [[x y] old-position]
         new-position [(+ x (first old-position)) (+ y (second old-position))]]
     (if (legal? p new-position)
@@ -378,7 +371,7 @@
 (defn detect-hits [timestamp]
   (mapcat (fn [s]
             (keep #(if (do (and (not= (%1 :id) (get-in s [:from-player]))
-                            (within? s %1)))
+                            (overlap? s %1)))
                      {:type :hit
                       :shot-id (s :id)
                       :from-player (s :from-player)
@@ -410,14 +403,14 @@
 (defn dist [p1 p2]
   (let [[x1 y1] p1
         [x2 y2] p2]
-    (sqrt (+ (exp (- x2 x1) 2) (exp (- y2 y1) 2)))))
+    (Math/sqrt (+ (exp (- x2 x1) 2) (exp (- y2 y1) 2)))))
 
 (defn angle-between [p1 p2]
   (let [[x1 y1] p1
         [x2 y2] p2
         dx (- x2 x1)
         dy (- y2 y1)]
-    (- (atan2 dy dx) Math/PI)))
+    (- (Math/atan2 dy dx) Math/PI)))
 
 (defn handle-ai [timestamp]
   (let [human (@entities (player :id))
@@ -491,12 +484,13 @@
    ;(.setInterval js/window add-ant 8000)
    (println "start called")
    ((fn render-loop [timestamp]
-      (swap! time-now #(do timestamp))
-      (update-world @keypresses timestamp)
-      (expire-transforms timestamp)
-      (draw-world
-       (do-entity-transform @entities timestamp))
-       (.requestAnimationFrame js/window render-loop))))
+      (when-not paused
+        (swap! time-now #(do timestamp))
+        (update-world @keypresses timestamp)
+        (expire-transforms timestamp)
+        (draw-world
+        (do-entity-transform @entities timestamp))
+        (.requestAnimationFrame js/window render-loop)))))
 
 (defonce main
   (do
