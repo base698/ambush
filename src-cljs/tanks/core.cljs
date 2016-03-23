@@ -225,17 +225,16 @@
         deltaX (- old-x px)
         angle (* (/ 180 Math/PI) (Math/atan (/ deltaY deltaX)))
         position (sapper :position)
-        x (+ (first position) (* (Math/cos angle) (sapper :speed)))
-        y (+ (second position) (* (Math/sin angle) (sapper :speed)))]
-    (swap! entities assoc-in [id :position] [x y])
-    (when (< (dist [x y] [px py]) 15)
-      (sapper-explosion-at [x y])
+        new-position (move-polar position angle (sapper :speed))]
+    (swap! entities assoc-in [id :position] new-position)
+    (when (< (dist new-position [px py]) 15)
+      (sapper-explosion-at new-position)
       (swap! entities dissoc id)
       {:type :splash-damage
        :timestamp (e :timestamp)
        :r 30
        :val 30
-       :position [x y]}
+       :position new-position}
     )))
 
 (defmethod do-event :splash-damage [e]
@@ -265,17 +264,14 @@
           shot (@entities (e :id))
           position (shot :position)
           [x y w h] position
-          x (+ x (* (Math/cos (shot :angle)) move ))
-          y (+ y (* (Math/sin (shot :angle)) move ))]
+          [x y] (move-polar [x y] (shot :angle) move)]
           (swap! entities assoc-in [(e :id) :position] [x y w h])))
 
 (defmethod do-event :shrapnel-move [e]
     (let [move (e :speed)
           shrapnel (@entities (e :id))
           position (shrapnel :position)
-          [x y] position
-          x (+ x (* (Math/cos (shrapnel :angle)) move ))
-          y (+ y (* (Math/sin (shrapnel :angle)) move ))]
+          [x y] (move-polar position (shrapnel :angle) move)]
           (if-not (e :expire)
             (swap! entities assoc-in [(e :id) :position] [x y])
             (swap! entities dissoc (e :id)))))
@@ -343,9 +339,7 @@
   (let [p (e :player)
         old-position (p :position) 
         move (* (p :speed) (e :player-move))
-        x (* (Math/cos (p :angle)) move )
-        y (* (Math/sin (p :angle)) move )
-        new-position [(+ x (first old-position)) (+ y (second old-position))]]
+        new-position (move-polar old-position (p :angle) move)]
     (if (legal? p new-position)
        (swap! entities assoc-in [(p :id) :position] new-position))))
 
