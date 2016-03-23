@@ -90,6 +90,11 @@
 
 (defonce level-increase-rate 1.2)
 
+(defn move-polar [p a r]
+  (let [[x y] p]
+        [(+ x (* (Math/cos a) r))
+         (+ y (* (Math/sin a) r))]))
+
 (defn get-shots [entities]
   (filter #(= :shot (%1 :type)) (vals entities)))
 
@@ -333,6 +338,7 @@
     (and (not (oob? new-position))
          (not-any? #(collision? p %1) (remove #(= (:id %1) pid) others)))))
 
+
 (defmethod do-event :player-move [e]
   (let [p (e :player)
         old-position (p :position) 
@@ -359,9 +365,8 @@
           :angle (player :angle) 
           :w 4
           :h 4
-          :position [(+ 7 x) (+ 7 y)]}))
+          :position (move-polar [(+ 7 x) (+ 7 y)] (player :angle) 18)}))
       (swap! entities assoc-in [id :last-shot] t))))
-
 
 ; these are events that just happen 
 (defn get-world-events [timestamp] 
@@ -436,7 +441,8 @@
                     :timestamp timestamp
                     :player cpu-player}))) (seq @ai-agents))))
 
-(defonce player-score (r/atom 0))
+(defonce ui-player-score (r/atom 0))
+(defonce ui-level (r/atom @level))
 
 (defn update-world [keypresses timestamp]
   (let [press-list (seq
@@ -456,7 +462,7 @@
         (handle-events (handle-ai timestamp))
         (handle-events (detect-hits timestamp)) 
         ;; update reagent value
-        (reset! player-score (get-in @entities [(player :id) :score]))
+        (reset! ui-player-score (get-in @entities [(player :id) :score]))
         (detect-shot-oob (get-shots @entities)))))
 
 (defn random-color [timestamp c]
@@ -509,16 +515,19 @@
         (reset! playing true)
         ((comp blur-focus 
                start)))
-    (do (reset! playing false) (blur-focus))))
+    (do (reset! playing false)
+        (blur-focus))))
 
 (defn app-ui []
   [:div#container
    [:div#title-bar
-    [:h1#title "Tanks"]
+    [:h1#title "Ambush!"]
     [:button#start {:on-click toggle-start} (if-not @playing "Play" "Pause")]]
    [:canvas#screen {:width WIDTH :height HEIGHT}]
-   [:span#player-name "Player 1"]
-   [:span#score @player-score]])
+   [:div.pinfo
+    [:span#player-name "Player 1"]
+    [:span#score @ui-player-score]]
+   [:span#level "Level " @ui-level] ])
 
 (defonce main
   (do
