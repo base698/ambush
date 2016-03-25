@@ -26,8 +26,7 @@
 
 (defonce playing (r/atom false))
 
-; TODO: finish
-(defn set-player-1 [])
+(defonce game-over (r/atom false))
 
 (defn get-shrapnel
   "position color speed and angle"
@@ -42,6 +41,7 @@
    :angle a
    :position p
    :color c})
+
 
 (defn get-player [h p c t]
   (let [p {:id (get-id)
@@ -73,14 +73,13 @@
                   32 :space})
 
 ;;; Crux of the data updated for the game
-(defonce player (assoc (get-player 10 [200, 200] "#072" 850) :human true))
+(defonce player (atom {}))
 
 (defonce keypresses (atom {}))
 
 (defonce ai-agents (atom {}))
 
-(defonce entities (atom {(player :id)
-                          player}))
+(defonce entities (atom {}))
 
 (defonce level (atom 1))
 
@@ -89,6 +88,21 @@
 (defonce speed-rate (atom 0.8))
 
 (defonce level-increase-rate 1.2)
+
+(defonce playing (r/atom false))
+
+(defonce game-over (r/atom false))
+
+(defn init-game []
+  (reset! player (assoc (get-player 10 [200, 200] "#072" 850) :human true))  
+  (reset! ai-agents {})
+  (reset! entities {(@player :id) @player})
+  (reset! level 1)
+  (reset! sapper-rate 6000)
+  (reset! speed-rate 0.8)
+  (reset! playing false)
+  (reset! game-over false))
+
 
 (defn move-polar [p a r]
   (let [[x y] p]
@@ -148,9 +162,9 @@
 ;; TODO: make into level up/playing cpu
 (defn add-player []
   (let [player (get-player 30 [500 500] "#992" 3300)
-        id (player :id)
+        id (@player :id)
         ai-id (add-ai id)
-        player (assoc player :ai-id ai-id)]
+        player (assoc @player :ai-id ai-id)]
     (swap! entities assoc id player)))
 
 (defonce player-key-map {:space {:type :shoot} 
@@ -210,39 +224,48 @@
   (doseq [n (range 0 400 100)]
     (.setTimeout js/window #(ring-explosion-at (/ n 20) p) n)))
  
+(defn start-enemies []
+  (def enemy-interval
+       (.setInterval js/window
+        (partial add-sapper @speed-rate) @sapper-rate)))
+
+
+(defn stop-enemies []
+  (.clearInterval js/window enemy-interval))
+
+
 (defmulti do-event (fn [e]
                      (:type e)))
 
 (defmethod do-event :default [x])
 
 (defmethod do-event :sapper-move [e]
-  (let [id (e :id) 
-        sapper (@entities id) 
-        old-y (get-in sapper [:position 1])
-        old-x (get-in sapper [:position 0])
-        [px py] (get-in @entities [(player :id) :position])
-        dX (- old-x px)
-        dY (- old-y py)
-        angle (* (/ 180 Math/PI) (Math/atan (/ dY dX)))
-        position (sapper :position)
-        new-position (move-polar position angle (sapper :speed))]
-    (swap! entities assoc-in [id :position] new-position)
-    (when (< (dist new-position [px py]) 10)
-      (sapper-explosion-at new-position)
-      (swap! entities dissoc id)
-      {:type :splash-damage
-       :timestamp (e :timestamp)
-       :r 30
-       :val 30
-       :position new-position}
-    )))
+  (if-let [sapper (@entities (e :id))]
+    (let [id (e :id) 
+            old-y (get-in sapper [:position 1])
+            old-x (get-in sapper [:position 0])
+            [px py] (get-in @entities [(@player :id) :position])
+            dX (- old-x px)
+            dY (- old-y py)
+            angle (* (/ 180 Math/PI) (Math/atan (/ dY dX)))
+            position (sapper :position)
+            new-position (move-polar position angle (sapper :speed))]
+        (swap! entities assoc-in [id :position] new-position)
+        (when (< (dist new-position [px py]) 20)
+        (sapper-explosion-at new-position)
+        (swap! entities dissoc id)
+        {:type :splash-damage
+        :timestamp (e :timestamp)
+        :r 30
+        :val 30
+        :position new-position}))))
 
 (defmethod do-event :splash-damage [e]
   (let [{timestamp :timestamp
          val :val
          r :r
          p :position} e
-        pid (player :id)
+        pid (@player :id)
         player (@entities pid)
         d (max 1 (dist (player :position) p))] 
 
@@ -303,14 +326,20 @@
   (explosion-at position)  
   (swap! ai-agents dissoc (get-in e [:entity :id :ai-id]))
   (swap! entities dissoc id)
-  (if (= id (player :id)) {:type :game-over})))
+  (if (= id (@player :id)) {:type :game-over})))
 
 ;; TODO: game over features let explosion finish etc
 ;; kill all entities left
 ;; stop moving
 (defmethod do-event :game-over [e]
-  (prn "game-over" e))
-  ;(reset! playing false))
+  (prn "game-over" e)
+  (reset! game-over true)
+  (stop-enemies)
+  (doseq [e (vals @entities)]
+    (if (= (e :type) :sapper)
+      (do-event {:type :death
+                 :entity e
+                 }))))
 
 (defmethod do-event :hit [e]
   (let [{shot-id :shot-id
@@ -406,6 +435,7 @@
     (apply (partial swap! entities dissoc)
            (map :id oob))))        
 
+
 ;; damage player
 ;;    normal weapon
 ;;       player moving
@@ -420,7 +450,7 @@
 ;;  :player-last-angle []}
 ;; TODO: create events processed as normal
 (defn handle-ai [timestamp]
-  (let [human (@entities (player :id))
+  (let [human (@entities (@player :id))
         position (human :position)
         angle (human :angle)]
     (keep (fn [ai-pair]
@@ -449,18 +479,18 @@
                            (map #(player-key-map (first %1)))
                            (map #(assoc %1
                                         :timestamp timestamp
-                                        :player (@entities (player :id)))))
+                                        :player (@entities (@player :id)))))
         world-events (get-world-events timestamp)]
     (do 
 
-        (if (@entities (player :id))
+        (if (@entities (@player :id))
           (do
             (handle-events (handle-ai timestamp))
             (handle-events player-events)))
         (handle-events world-events)
         (handle-events (detect-hits timestamp)) 
         ;; update reagent value
-        (reset! ui-player-score (get-in @entities [(player :id) :score]))
+        (reset! ui-player-score (get-in @entities [(@player :id) :score]))
         (detect-shot-oob (get-shots @entities)))))
 
 (defn random-color [timestamp c]
@@ -490,8 +520,6 @@
 (defn start
   "create the render loop for the game"
   []
-  ;(.setInterval js/window (partial add-sapper @speed-rate) 8000)
-  (println "start called")
   ((fn render-loop [timestamp]
      (when @playing
        (swap! time-now #(do timestamp))
@@ -501,6 +529,7 @@
           (do-entity-transform @entities timestamp))
        (.requestAnimationFrame js/window render-loop)))))
 
+
 (defn blur-focus [& a]
   (.blur
     (.getElementById
@@ -508,19 +537,31 @@
     "start")))
 
 (defn toggle-start []
-  (if-not @playing
+  (if @game-over
     (do
+      (reset! game-over false)
+      (init-game)
+      ;; stop render loop and start back
+      (reset! playing false)
+      (.setTimeout js/window
+        #(toggle-start) 250))
+  (if-not @playing
+    (do 
+        (start-enemies)
         (reset! playing true)
         ((comp blur-focus 
                start)))
-    (do (reset! playing false)
-        (blur-focus))))
+    (do
+        (stop-enemies)
+        (reset! playing false)
+        (blur-focus)))))
 
 (defn app-ui []
   [:div#container
    [:div#title-bar
     [:h1#title "Ambush!"]
-    [:button#start {:on-click toggle-start} (if-not @playing "Play" "Pause")]]
+    [:button#start {:on-click toggle-start} (if @game-over "Play Again"
+                                                (if-not @playing "Play" "Pause"))]]
    [:canvas#screen {:width WIDTH :height HEIGHT}]
    [:div.pinfo
     [:span#player-name "Player 1"]
@@ -529,6 +570,7 @@
 
 (defonce main
   (do
+    (init-game)
     (r/render-component [app-ui]
                         (js/document.getElementById "main"))
     (.addEventListener js/window "keydown"
