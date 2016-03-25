@@ -8,5 +8,5 @@ My first attempt at a working game with ClojureScript.
 
 ## TODO
 ----
-Multiplayer
-Fight other player ai
+* Multiplayer
+* Fight other player ai
