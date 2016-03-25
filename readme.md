@@ -1,11 +1,12 @@
-My first attempt at a working program with ClojureScript.  
+My first attempt at a working game with ClojureScript.  
 
-Currently working
+## Currently working
 ----
 * Move around and shoot things!
+* Animations
+* Simple Collection Detection.
 
-TODO
+## TODO
 ----
-* Spawn
-* Move towards player (basic AI)
-* Make do-event less ugly
+Multiplayer
+Fight other player ai
