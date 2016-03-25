@@ -58,6 +58,7 @@
            :last-shot 0
            :hits 0
            :shots 0
+           :kills 0
            :transforms []
            :bombs 1}]
     p))
@@ -85,14 +86,70 @@
 
 (defonce sapper-rate (atom 6000))
 
-(defonce speed-rate (atom 0.8))
+(defonce speed-rate (atom 0.6))
 
 (defonce level-increase-rate 1.2)
+
+(defonce points-for-kill (atom 10))
 
 (defonce playing (r/atom false))
 
 (defonce game-over (r/atom false))
 
+(defonce powers-of-two
+  (into #{}
+        (drop 1 (take 20 (iterate (partial * 2) 1)))))
+
+
+(defn power-of-two? [n]
+  (powers-of-two n))
+
+
+(defn intro-enemy-position []
+  (nth [[-5 (rand-int HEIGHT)]
+        [(rand-int WIDTH) -5]
+        [(+ 5 WIDTH) (rand-int HEIGHT)]
+        [(rand-int WIDTH) (+ 5 HEIGHT)]] (rand-int 4)))
+
+
+(defn add-sapper [s]
+  (let [id (get-id)]
+    (swap! entities 
+      assoc 
+      id {:id id
+          :type :sapper
+          :w 10
+          :h 10
+          :speed s
+          :health 10
+          :transforms []
+          :position (intro-enemy-position)})))
+
+
+(defn start-enemies []
+  (def enemy-interval
+       (.setInterval js/window
+        (partial add-sapper @speed-rate) @sapper-rate)))
+
+
+(defn stop-enemies []
+  (.clearInterval js/window enemy-interval))
+
+
+(defn level-up []
+  (swap! speed-rate (partial * level-increase-rate))
+  (swap! sapper-rate (comp Math/floor (partial * 0.9)))
+  (swap! points-for-kill (comp Math/floor (partial * level-increase-rate)))
+  (swap! level inc)
+  (stop-enemies)
+  (start-enemies))
+  
+
+(defn check-level-up []
+  (if (power-of-two?
+       (get-in @entities [(@player :id) :kills]))
+    (level-up)))
+  
 (defn init-game []
   (reset! player (assoc (get-player 10 [200, 200] "#072" 850) :human true))  
   (reset! ai-agents {})
@@ -101,6 +158,7 @@
   (reset! sapper-rate 6000)
   (reset! speed-rate 0.8)
   (reset! playing false)
+  (reset! points-for-kill 10)
   (reset! game-over false))
 
 
@@ -131,24 +189,6 @@
          (< py1 qy2)
          (> py2 qy1))))
  
-(defn intro-enemy-position []
-  (nth [[-5 (rand-int HEIGHT)]
-        [(rand-int WIDTH) -5]
-        [(+ 5 WIDTH) (rand-int HEIGHT)]
-        [(rand-int WIDTH) (+ 5 HEIGHT)]] (rand-int 4)))
-
-(defn add-sapper [s]
-  (let [id (get-id)]
-    (swap! entities 
-      assoc 
-      id {:id id
-          :type :sapper
-          :w 10
-          :h 10
-          :speed s
-          :health 10
-          :transforms []
-          :position (intro-enemy-position)})))
 
 (defn add-ai [id]
   (let [ai {:id (get-id)
@@ -224,15 +264,6 @@
   (doseq [n (range 0 400 100)]
     (.setTimeout js/window #(ring-explosion-at (/ n 20) p) n)))
  
-(defn start-enemies []
-  (def enemy-interval
-       (.setInterval js/window
-        (partial add-sapper @speed-rate) @sapper-rate)))
-
-
-(defn stop-enemies []
-  (.clearInterval js/window enemy-interval))
-
 
 (defmulti do-event (fn [e]
                      (:type e)))
@@ -251,7 +282,7 @@
             position (sapper :position)
             new-position (move-polar position angle (sapper :speed))]
         (swap! entities assoc-in [id :position] new-position)
-        (when (< (dist new-position [px py]) 20)
+        (when (< (dist new-position [px py]) 15)
         (sapper-explosion-at new-position)
         (swap! entities dissoc id)
         {:type :splash-damage
@@ -299,6 +330,7 @@
             (swap! entities assoc-in [(e :id) :position] [x y])
             (swap! entities dissoc (e :id)))))
 
+
 (defmethod do-event :player-turn [e]
   (let [player (e :player)
         pid (player :id)
@@ -306,19 +338,26 @@
     (swap! entities assoc-in [pid :angle]
            (+ angle (player :angle)))))
 
+
 (defmethod do-event :damage [e]
   (let [id (get-in e [:entity :id])
         val (e :val)
         from-player-id (e :from-player-id)
         type (get-in @entities [id :type])
-        score ({:sapper 10 :player 20} type)]
+        score @points-for-kill]
     (swap! entities update-in [id :health] #(- %1 val))
     (if (<= (get-in @entities [id :health]) 0)
       (do 
-        (if from-player-id (swap! entities update-in
-               [from-player-id :score] (partial + score)))
+        (if from-player-id
+          (do 
+            (swap! entities update-in
+                   [from-player-id :kills] inc)
+            (check-level-up)
+            (swap! entities update-in
+                 [from-player-id :score] (partial + score))))
         {:type :death :entity (@entities id)})
       nil))) 
+
 
 (defmethod do-event :death [e]
   (let [id (get-in e [:entity :id])
@@ -328,9 +367,7 @@
   (swap! entities dissoc id)
   (if (= id (@player :id)) {:type :game-over})))
 
-;; TODO: game over features let explosion finish etc
-;; kill all entities left
-;; stop moving
+
 (defmethod do-event :game-over [e]
   (prn "game-over" e)
   (reset! game-over true)
@@ -361,7 +398,8 @@
 (defn legal? [player new-position]
   (let [p (assoc player :position new-position)
         pid (player :id)
-        others (get-players-and-walls @entities)]
+        others (remove #(= (%1 :type) :sapper)
+                       (get-players-and-walls @entities))]
     (and (not (oob? new-position))
          (not-any? #(collision? p %1) (remove #(= (:id %1) pid) others)))))
 
@@ -491,6 +529,7 @@
         (handle-events (detect-hits timestamp)) 
         ;; update reagent value
         (reset! ui-player-score (get-in @entities [(@player :id) :score]))
+        (reset! ui-level @level)
         (detect-shot-oob (get-shots @entities)))))
 
 (defn random-color [timestamp c]
