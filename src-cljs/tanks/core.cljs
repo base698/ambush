@@ -86,7 +86,7 @@
 
 (defonce sapper-rate (atom 6000))
 
-(defonce speed-rate (atom 6000))
+(defonce speed-rate (atom 0.8))
 
 (defonce level-increase-rate 1.2)
 
@@ -221,13 +221,13 @@
         old-y (get-in sapper [:position 1])
         old-x (get-in sapper [:position 0])
         [px py] (get-in @entities [(player :id) :position])
-        deltaY (- old-y py)
-        deltaX (- old-x px)
-        angle (* (/ 180 Math/PI) (Math/atan (/ deltaY deltaX)))
+        dX (- old-x px)
+        dY (- old-y py)
+        angle (* (/ 180 Math/PI) (Math/atan (/ dY dX)))
         position (sapper :position)
         new-position (move-polar position angle (sapper :speed))]
     (swap! entities assoc-in [id :position] new-position)
-    (when (< (dist new-position [px py]) 15)
+    (when (< (dist new-position [px py]) 10)
       (sapper-explosion-at new-position)
       (swap! entities dissoc id)
       {:type :splash-damage
@@ -306,9 +306,11 @@
   (if (= id (player :id)) {:type :game-over})))
 
 ;; TODO: game over features let explosion finish etc
+;; kill all entities left
+;; stop moving
 (defmethod do-event :game-over [e]
-  (prn "game-over" e)
-  (reset! playing false))
+  (prn "game-over" e))
+  ;(reset! playing false))
 
 (defmethod do-event :hit [e]
   (let [{shot-id :shot-id
@@ -450,10 +452,12 @@
                                         :player (@entities (player :id)))))
         world-events (get-world-events timestamp)]
     (do 
+
         (if (@entities (player :id))
-            (handle-events player-events))
+          (do
+            (handle-events (handle-ai timestamp))
+            (handle-events player-events)))
         (handle-events world-events)
-        (handle-events (handle-ai timestamp))
         (handle-events (detect-hits timestamp)) 
         ;; update reagent value
         (reset! ui-player-score (get-in @entities [(player :id) :score]))
@@ -486,7 +490,7 @@
 (defn start
   "create the render loop for the game"
   []
-  ;(.setInterval js/window (partial add-sapper speed-rate) 8000)
+  ;(.setInterval js/window (partial add-sapper @speed-rate) 8000)
   (println "start called")
   ((fn render-loop [timestamp]
      (when @playing
