@@ -421,7 +421,8 @@
                                         :player (@entities (player :id)))))
         world-events (get-world-events timestamp)]
     (do 
-        (handle-events player-events)
+        (if (@entities (player :id))
+            (handle-events player-events))
         (handle-events world-events)
         (handle-events (handle-ai timestamp))
         (handle-events (detect-hits timestamp)) 
