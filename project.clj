@@ -11,6 +11,7 @@
               :builds {:prod {:id "prod"
                         ; The path to the top-level ClojureScript source directory:
                         :source-paths ["src-cljs"]
+                        :figwheel false
                         ; The standard ClojureScript compiler options:
                         ; (See the ClojureScript compiler documentation for details.)
                         :compiler {
